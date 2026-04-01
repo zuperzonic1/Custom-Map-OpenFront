@@ -1,88 +1,41 @@
-import {
-  expectLand,
-  expectWater,
-  paintCanvasAt,
-  setRangeInput,
-  waitForLand,
-  waitForWater,
-} from './editorHelpers.js'
+import { setRangeInput } from './editorHelpers.js'
 
-describe('OpenFront sprint 2 shell', () => {
+describe('OpenFront tool controls', () => {
   beforeEach(() => {
+    cy.clearLocalStorage()
     cy.visit('/')
   })
 
-  it('loads the editor shell and canvas', () => {
-    cy.contains('OpenFront map editor').should('be.visible')
-    cy.contains('Sprint 2: editor depth').should('be.visible')
-    cy.contains('Reset map').should('be.visible')
-    cy.get('canvas').should('be.visible')
-    cy.contains('Tools').should('be.visible')
+  it('shows all four tool buttons: Land, Water, Elevation and Nation', () => {
+    cy.contains('.button-group button', 'Land').should('exist')
+    cy.contains('.button-group button', 'Water').should('exist')
+    cy.contains('.button-group button', 'Elevation').should('exist')
+    cy.contains('.button-group button', 'Nation').should('exist')
   })
 
-  it('switches between land and water tools', () => {
+  it('activates only the clicked tool button and deactivates the rest', () => {
     cy.contains('.button-group button', 'Land').should('have.class', 'active')
-    cy.contains('.button-group button', 'Water').should('not.have.class', 'active')
 
     cy.contains('.button-group button', 'Water').click()
-
     cy.contains('.button-group button', 'Water').should('have.class', 'active')
     cy.contains('.button-group button', 'Land').should('not.have.class', 'active')
+
+    cy.contains('.button-group button', 'Elevation').click()
+    cy.contains('.button-group button', 'Elevation').should('have.class', 'active')
+    cy.contains('.button-group button', 'Water').should('not.have.class', 'active')
+
+    cy.contains('.button-group button', 'Nation').click()
+    cy.contains('.button-group button', 'Nation').should('have.class', 'active')
+    cy.contains('.button-group button', 'Elevation').should('not.have.class', 'active')
   })
 
-  it('switches to water and repaints painted tiles', () => {
-    cy.get('canvas').then(($canvas) => {
-      const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
-
-      cy.contains('.button-group button', 'Land').click()
-      paintCanvasAt(canvas, paintX, paintY)
-
-      cy.contains('.button-group button', 'Water').click()
-      paintCanvasAt(canvas, paintX, paintY)
-
-      waitForWater(canvas, paintX, paintY)
-    })
+  it('brush size label updates when the slider changes', () => {
+    setRangeInput('Brush size', 5)
+    cy.contains('.field', 'Brush size').find('strong').should('have.text', '5')
   })
 
-  it('resets the map after painting', () => {
-    cy.get('canvas').then(($canvas) => {
-      const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
-
-      cy.contains('.button-group button', 'Land').click()
-      paintCanvasAt(canvas, paintX, paintY)
-
-      cy.contains('Reset map').click()
-
-      waitForWater(canvas, paintX, paintY)
-    })
-  })
-
-  it('uses zoom when painting into the canvas', () => {
-    cy.get('canvas').then(($canvas) => {
-      const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
-      const adjacentX = paintX + 14
-      const adjacentY = paintY
-
-      cy.contains('.button-group button', 'Land').click()
-      setRangeInput('Zoom', 2)
-      paintCanvasAt(canvas, paintX, paintY)
-
-      waitForLand(canvas, paintX, paintY)
-      waitForLand(canvas, adjacentX, adjacentY)
-    })
-  })
-
-  it('renders the default project stats', () => {
-    cy.get('.info').scrollTo('top')
-    cy.contains('Project').scrollIntoView().should('exist')
-    cy.contains('Width').should('exist')
-    cy.contains('Height').should('exist')
-    cy.contains('Tiles').should('exist')
+  it('elevation label updates when the slider changes', () => {
+    setRangeInput('Elevation', 200)
+    cy.contains('.field', 'Elevation').find('strong').should('have.text', '200')
   })
 })

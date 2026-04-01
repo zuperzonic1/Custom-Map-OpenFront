@@ -1,57 +1,25 @@
 import {
   expectLand,
-  expectWater,
   getCanvasColorAt,
+  holdDraw,
   paintCanvasAt,
   setRangeInput,
   waitForLand,
   waitForWater,
 } from './editorHelpers.js'
 
-function holdDraw(canvas, points) {
-  const rect = canvas.getBoundingClientRect()
-  const [firstPoint, ...rest] = points
-
-  cy.wrap(canvas).trigger('mousedown', {
-    clientX: rect.left + firstPoint.x,
-    clientY: rect.top + firstPoint.y,
-    button: 0,
-    buttons: 1,
-    bubbles: true,
-    force: true,
-  })
-
-  rest.forEach((point) => {
-    cy.wrap(canvas).trigger('mousemove', {
-      clientX: rect.left + point.x,
-      clientY: rect.top + point.y,
-      button: 0,
-      buttons: 1,
-      bubbles: true,
-      force: true,
-    })
-  })
-
-  cy.wrap(canvas).trigger('mouseup', {
-    clientX: rect.left + points[points.length - 1].x,
-    clientY: rect.top + points[points.length - 1].y,
-    button: 0,
-    buttons: 0,
-    bubbles: true,
-    force: true,
-  })
-}
-
-describe('OpenFront brush', () => {
+describe('OpenFront brush tool', () => {
   beforeEach(() => {
+    cy.clearLocalStorage()
     cy.visit('/')
   })
 
-  it('paints land on click', () => {
+  it('paints a land tile at the clicked position with brush size 1', () => {
     cy.get('canvas').then(($canvas) => {
       const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
+      // (112,112) → tile (8,8) — safely inside the default 64×48 map
+      const paintX = 112
+      const paintY = 112
 
       cy.contains('.button-group button', 'Land').click()
       setRangeInput('Brush size', 1)
@@ -62,13 +30,13 @@ describe('OpenFront brush', () => {
     })
   })
 
-  it('keeps drawing while the mouse is held down', () => {
+  it('paints continuously as the pointer moves while held down', () => {
     cy.get('canvas').then(($canvas) => {
       const canvas = $canvas[0]
-      const startX = 320
-      const startY = 220
-      const nextX = 334
-      const nextY = 220
+      const startX = 112
+      const startY = 112
+      const nextX = 126
+      const nextY = 112
 
       cy.contains('.button-group button', 'Land').click()
       setRangeInput('Brush size', 1)
@@ -83,11 +51,11 @@ describe('OpenFront brush', () => {
     })
   })
 
-  it('switches to water and repaints painted tiles', () => {
+  it('switching to Water tool and clicking the same tile removes the land', () => {
     cy.get('canvas').then(($canvas) => {
       const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
+      const paintX = 112
+      const paintY = 112
 
       cy.contains('.button-group button', 'Land').click()
       paintCanvasAt(canvas, paintX, paintY)
@@ -99,11 +67,11 @@ describe('OpenFront brush', () => {
     })
   })
 
-  it('expands the painted area when brush size increases', () => {
+  it('brush size 3 paints the center tile and its immediate neighbours', () => {
     cy.get('canvas').then(($canvas) => {
       const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
+      const paintX = 112
+      const paintY = 112
       const adjacentX = paintX + 14
 
       cy.contains('.button-group button', 'Land').click()
@@ -115,11 +83,11 @@ describe('OpenFront brush', () => {
     })
   })
 
-  it('can read painted pixels from the canvas', () => {
+  it('canvas getContext readback returns a non-transparent colour for a painted land tile', () => {
     cy.get('canvas').then(($canvas) => {
       const canvas = $canvas[0]
-      const paintX = 320
-      const paintY = 220
+      const paintX = 112
+      const paintY = 112
 
       cy.contains('.button-group button', 'Land').click()
       paintCanvasAt(canvas, paintX, paintY)

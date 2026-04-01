@@ -2,6 +2,27 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
+// Helper to serialize Uint8Array to base64 for efficient localStorage storage
+function typedArrayToBase64(arr: Uint8Array): string {
+  let binary = ''
+  const len = arr.length
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(arr[i])
+  }
+  return btoa(binary)
+}
+
+// Helper to deserialize base64 to Uint8Array
+function base64ToTypedArray(base64: string): Uint8Array {
+  const binaryString = atob(base64)
+  const len = binaryString.length
+  const arr = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    arr[i] = binaryString.charCodeAt(i)
+  }
+  return arr
+}
+
 export type TerrainType = 0 | 1
 
 export type Nation = {
@@ -28,9 +49,10 @@ export type MapProject = {
 
 export type EditorTool = 'land' | 'water' | 'elevation' | 'nation'
 
+// Type for localStorage storage - uses base64 strings instead of arrays
 type SerializedProject = Omit<MapProject, 'terrain' | 'magnitude'> & {
-  terrain: number[]
-  magnitude: number[]
+  terrain: string
+  magnitude: string
 }
 
 type EditorStoreState = {
@@ -88,12 +110,13 @@ function createBlankProject(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT): Map
 }
 
 function serializeProject(project: MapProject): SerializedProject {
+  // Use base64 encoding for more efficient storage than array of numbers
   return {
     name: project.name,
     width: project.width,
     height: project.height,
-    terrain: Array.from(project.terrain),
-    magnitude: Array.from(project.magnitude),
+    terrain: typedArrayToBase64(project.terrain),
+    magnitude: typedArrayToBase64(project.magnitude),
     nations: project.nations,
     metadata: project.metadata,
   }
@@ -104,11 +127,14 @@ function deserializeProject(project: SerializedProject | MapProject): MapProject
     name: project.name,
     width: project.width,
     height: project.height,
-    terrain: project.terrain instanceof Uint8Array ? project.terrain : Uint8Array.from(project.terrain),
+    terrain:
+      project.terrain instanceof Uint8Array
+        ? project.terrain
+        : base64ToTypedArray(project.terrain as string),
     magnitude:
       project.magnitude instanceof Uint8Array
         ? project.magnitude
-        : Uint8Array.from(project.magnitude),
+        : base64ToTypedArray(project.magnitude as string),
     nations: project.nations ?? [],
     metadata: project.metadata ?? {
       author: '',
@@ -230,6 +256,8 @@ export const useEditorStore = create<EditorStoreState>()(
               magnitude[index] = tool === 'elevation' ? elevationValue : 180
             }
           }
+
+          state.renderRevision = (state.renderRevision ?? 0) + 1
         }),
       addNationAt: (tileX, tileY) =>
         set((state) => {

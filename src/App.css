@@ -155,6 +155,7 @@ button:active,
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(2, 6, 23, 0.28);
+  overflow: hidden;
 }
 
 .size-grid {
@@ -168,6 +169,18 @@ button:active,
   margin: 0 0 12px;
   font-size: 14px;
   color: var(--text-strong);
+}
+
+.minimap-card {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.minimap-card h3 {
+  margin: 0;
+  padding: 14px 14px 8px;
+  flex: 0 0 auto;
 }
 
 .status-card dl {
@@ -236,12 +249,33 @@ button:active,
   box-shadow: var(--shadow);
 }
 
-.minimap-canvas {
+.minimap-frame {
+  position: relative;
   width: 100%;
-  height: auto;
-  border-radius: 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  line-height: 0;
   border: 1px solid var(--line);
+  border-radius: 12px;
   background: #020617;
+  box-sizing: border-box;
+}
+
+.minimap-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .nations-list {

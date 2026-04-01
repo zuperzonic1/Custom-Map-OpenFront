@@ -7,9 +7,72 @@ type ChunkProject = {
   magnitude: Uint8Array
 }
 
-const chunkCanvasCache = new Map<string, HTMLCanvasElement>()
+// LRU Cache with configurable max entries to prevent memory bloat on large maps
+const MAX_CACHE_ENTRIES = 100
 
-function getChunkKey(project: ChunkProject, chunkX: number, chunkY: number) {
+interface CacheEntry {
+  key: string
+  canvas: HTMLCanvasElement
+  lastAccessed: number
+}
+
+class LRUCache {
+  private entries = new Map<string, CacheEntry>()
+  private accessOrder: string[] = [] // Track access order for LRU eviction
+
+  get(key: string): HTMLCanvasElement | undefined {
+    const entry = this.entries.get(key)
+    if (!entry) return undefined
+
+    // Move to most recently used position
+    this.touch(key)
+    return entry.canvas
+  }
+
+  set(key: string, canvas: HTMLCanvasElement): void {
+    if (this.entries.has(key)) {
+      this.entries.set(key, { key, canvas, lastAccessed: Date.now() })
+      this.touch(key)
+    } else {
+      // Evict oldest entries if at capacity
+      while (this.entries.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = this.accessOrder.shift()
+        if (oldestKey) {
+          this.entries.delete(oldestKey)
+        }
+      }
+
+      this.entries.set(key, { key, canvas, lastAccessed: Date.now() })
+      this.accessOrder.push(key)
+    }
+  }
+
+  delete(key: string): void {
+    this.entries.delete(key)
+    this.accessOrder = this.accessOrder.filter((k) => k !== key)
+  }
+
+  clear(): void {
+    this.entries.clear()
+    this.accessOrder = []
+  }
+
+  size(): number {
+    return this.entries.size
+  }
+
+  private touch(key: string): void {
+    const index = this.accessOrder.indexOf(key)
+    if (index > -1) {
+      this.accessOrder.splice(index, 1)
+      this.accessOrder.push(key)
+    }
+  }
+}
+
+const chunkCanvasCache = new LRUCache()
+
+function getChunkKey(project: ChunkProject, chunkX: number, chunkY: number): string {
   return `${project.width}x${project.height}:${chunkX},${chunkY}`
 }
 
@@ -25,11 +88,11 @@ function getChunkBounds(project: ChunkProject, chunkX: number, chunkY: number) {
   }
 }
 
-export function invalidateAllChunkCache() {
+export function invalidateAllChunkCache(): void {
   chunkCanvasCache.clear()
 }
 
-export function invalidateChunkCacheForTile(project: ChunkProject, tileX: number, tileY: number) {
+export function invalidateChunkCacheForTile(project: ChunkProject, tileX: number, tileY: number): void {
   const chunkX = Math.floor(tileX / CHUNK_SIZE)
   const chunkY = Math.floor(tileY / CHUNK_SIZE)
   chunkCanvasCache.delete(getChunkKey(project, chunkX, chunkY))
@@ -41,7 +104,7 @@ export function invalidateChunkCacheForRect(
   minTileY: number,
   maxTileX: number,
   maxTileY: number,
-) {
+): void {
   const startChunkX = Math.floor(minTileX / CHUNK_SIZE)
   const startChunkY = Math.floor(minTileY / CHUNK_SIZE)
   const endChunkX = Math.floor(maxTileX / CHUNK_SIZE)
@@ -54,12 +117,10 @@ export function invalidateChunkCacheForRect(
   }
 }
 
-export function getChunkCanvas(project: ChunkProject, chunkX: number, chunkY: number) {
+export function getChunkCanvas(project: ChunkProject, chunkX: number, chunkY: number): HTMLCanvasElement {
   const key = getChunkKey(project, chunkX, chunkY)
   const cached = chunkCanvasCache.get(key)
-  if (cached) {
-    return cached
-  }
+  if (cached) return cached
 
   const bounds = getChunkBounds(project, chunkX, chunkY)
   const canvas = document.createElement('canvas')
@@ -68,6 +129,7 @@ export function getChunkCanvas(project: ChunkProject, chunkX: number, chunkY: nu
 
   const ctx = canvas.getContext('2d')
   if (!ctx) {
+    chunkCanvasCache.set(key, canvas)
     return canvas
   }
 
@@ -92,4 +154,12 @@ export function getChunkCanvas(project: ChunkProject, chunkX: number, chunkY: nu
 
   chunkCanvasCache.set(key, canvas)
   return canvas
+}
+
+// Debug function to check cache stats
+export function getChunkCacheStats() {
+  return {
+    entries: chunkCanvasCache.size(),
+    maxEntries: MAX_CACHE_ENTRIES,
+  }
 }
