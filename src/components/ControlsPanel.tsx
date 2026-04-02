@@ -1,5 +1,6 @@
 import React from 'react'
 import { useEditorStore, MAX_LAND_TILES } from '../store/editorStore'
+import { useViewportStore } from '../store/viewportStore'
 
 export interface ControlsPanelProps {
   onResetMap?: () => void
@@ -137,12 +138,11 @@ function NationNameControl(): React.ReactElement {
 }
 
 function ZoomControl(): React.ReactElement {
-  const zoom = useEditorStore((state) => state.zoom)
-  const setZoom = useEditorStore((state) => state.setZoom)
+  const zoom = useViewportStore((state) => state.zoom)
 
   const handleZoomSliderChange = (value: number): void => {
     const clamped = Math.max(0.05, Math.min(6, value))
-    setZoom(clamped)
+    useViewportStore.setState({ zoom: clamped })
   }
 
   return (

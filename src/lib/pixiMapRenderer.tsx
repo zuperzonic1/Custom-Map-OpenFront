@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { autoDetectRenderer, Container, Sprite, Text, Texture, type Renderer } from 'pixi.js'
 import { useEditorStore, paintTilesDirect } from '../store/editorStore'
+import { useViewportStore } from '../store/viewportStore'
 import {
   mapCanvas,
   mapCanvasVersion,
@@ -123,8 +124,7 @@ export function usePixiMapRenderer(
     )
     const panX = (vw - project.width * baseTileSize * fitZoom) / 2
     const panY = (vh - project.height * baseTileSize * fitZoom) / 2
-    store.setZoom(fitZoom)
-    store.setPan(panX, panY)
+    useViewportStore.setState({ zoom: fitZoom, panX, panY })
   }, [baseTileSize])
 
   // ── Renderer init / teardown ────────────────────────────────────────────────
@@ -204,9 +204,9 @@ export function usePixiMapRenderer(
       worldContainerRef.current = worldContainer
       nationContainerRef.current = nationContainer
 
-      // Tell the store the initial viewport size so the minimap viewport
+      // Tell the viewport store the initial size so the minimap viewport
       // indicator is correct before the first ResizeObserver fires.
-      useEditorStore.getState().setViewport(renderer.screen.width, renderer.screen.height)
+      useViewportStore.setState({ viewportWidth: renderer.screen.width, viewportHeight: renderer.screen.height })
 
       setIsReady(true)
     }
@@ -254,12 +254,14 @@ export function usePixiMapRenderer(
     if (!renderer || !worldContainer || !nationContainer) return
 
     const store = useEditorStore.getState()
-    const { zoom, panX, panY, renderRevision, pendingFitToView } = store
+    const viewport = useViewportStore.getState()
+    const { renderRevision } = store
+    const { zoom, panX, panY, pendingFitToView } = viewport
 
     // 0. Fit the entire map into the viewport when a new project was created.
     if (pendingFitToView) {
       fitMapToView()
-      store.clearFitToView()
+      useViewportStore.setState({ pendingFitToView: false })
     }
 
     // 1. Apply world transform — always cheap.
@@ -359,7 +361,7 @@ export function usePixiMapRenderer(
       const { width, height } = entry.contentRect
         if (width > 0 && height > 0) {
           rendererRef.current.resize(width, height)
-          useEditorStore.getState().setViewport(width, height)
+          useViewportStore.setState({ viewportWidth: width, viewportHeight: height })
         }
     })
 
@@ -429,23 +431,24 @@ export function PixiMapEditor() {
     (event: WheelEvent) => {
       event.preventDefault()
 
-      const store = useEditorStore.getState()
+      const viewport = useViewportStore.getState()
       const canvas = canvasRef.current
       if (!canvas) return
 
       const rect = canvas.getBoundingClientRect()
       const factor = Math.exp(-event.deltaY * 0.001)
-      const nextZoom = Math.min(6, Math.max(0.05, store.zoom * factor))
+      const nextZoom = Math.min(6, Math.max(0.05, viewport.zoom * factor))
 
       const localX = event.clientX - rect.left
       const localY = event.clientY - rect.top
-      const currentTileSize = BASE_TILE_SIZE * store.zoom
-      const worldX = (localX - store.panX) / currentTileSize
-      const worldY = (localY - store.panY) / currentTileSize
+      const currentTileSize = BASE_TILE_SIZE * viewport.zoom
+      const worldX = (localX - viewport.panX) / currentTileSize
+      const worldY = (localY - viewport.panY) / currentTileSize
       const nextPanX = localX - worldX * (BASE_TILE_SIZE * nextZoom)
       const nextPanY = localY - worldY * (BASE_TILE_SIZE * nextZoom)
 
-      store.setZoomAndPan(nextZoom, nextPanX, nextPanY)
+      // Plain-object setState to plain store — zero overhead (no Immer, no persist).
+      useViewportStore.setState({ zoom: nextZoom, panX: nextPanX, panY: nextPanY })
     },
     [canvasRef],
   )
@@ -462,12 +465,13 @@ export function PixiMapEditor() {
     if (!canvas) return null
 
     const rect = canvas.getBoundingClientRect()
+    const viewport = useViewportStore.getState()
     const store = useEditorStore.getState()
-    const tileSize = BASE_TILE_SIZE * store.zoom
+    const tileSize = BASE_TILE_SIZE * viewport.zoom
     const localX = clientX - rect.left
     const localY = clientY - rect.top
-    const x = Math.floor((localX - store.panX) / tileSize)
-    const y = Math.floor((localY - store.panY) / tileSize)
+    const x = Math.floor((localX - viewport.panX) / tileSize)
+    const y = Math.floor((localY - viewport.panY) / tileSize)
 
     if (x < 0 || y < 0 || x >= store.project.width || y >= store.project.height) {
       return null
@@ -488,27 +492,27 @@ export function PixiMapEditor() {
 
     if (event.button === 1 || isSpacePressedRef.current) {
       isDrawingRef.current = false
-      const originPan = { x: store.panX, y: store.panY }
+      const viewport = useViewportStore.getState()
+      const originPan = { x: viewport.panX, y: viewport.panY }
       const startX = event.clientX
       const startY = event.clientY
 
-      const onMove = (moveEvent: PointerEvent | MouseEvent) => {
+      // Use only pointer events — mousemove/mouseup also fire for the same
+      // physical events on desktop, so registering both would double the rate.
+      // Plain-object setState to plain store — zero overhead (no Immer, no persist).
+      const onMove = (moveEvent: PointerEvent) => {
         const dx = moveEvent.clientX - startX
         const dy = moveEvent.clientY - startY
-        useEditorStore.getState().setPan(originPan.x + dx, originPan.y + dy)
+        useViewportStore.setState({ panX: originPan.x + dx, panY: originPan.y + dy })
       }
 
       const onUp = () => {
-        window.removeEventListener('pointermove', onMove as EventListener)
-        window.removeEventListener('mousemove', onMove as EventListener)
-        window.removeEventListener('pointerup', onUp as EventListener)
-        window.removeEventListener('mouseup', onUp as EventListener)
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
       }
 
-      window.addEventListener('pointermove', onMove as EventListener)
-      window.addEventListener('mousemove', onMove as EventListener)
-      window.addEventListener('pointerup', onUp as EventListener)
-      window.addEventListener('mouseup', onUp as EventListener)
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
       return
     }
 

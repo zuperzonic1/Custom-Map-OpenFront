@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { useEditorStore } from '../store/editorStore'
+import { useViewportStore } from '../store/viewportStore'
 
 export interface InfoPanelProps {
   onExportMap?: () => void
@@ -203,7 +204,7 @@ function Minimap({
 
       // Viewport indicator — white rect tracking the visible area.
       // Fully zoomed out → rect equals minimap bounds → white border.
-      const { zoom, panX, panY, viewportWidth, viewportHeight } = state
+      const { zoom, panX, panY, viewportWidth, viewportHeight } = useViewportStore.getState()
       const tileLeft  = -panX / (TILE_SIZE * zoom)
       const tileTop   = -panY / (TILE_SIZE * zoom)
       const tilesWide = viewportWidth  / (TILE_SIZE * zoom)
@@ -271,13 +272,15 @@ function Minimap({
       rafId = requestAnimationFrame(() => { rafId = null; sizeAndDraw() })
     }
 
-    // Subscribe to ALL store changes — the rAF guard ensures at most one
-    // canvas composite per frame regardless of how many state mutations occur.
-    const unsubscribe = useEditorStore.subscribe(schedule)
+    // Subscribe to BOTH stores so minimap updates on terrain changes AND viewport changes.
+    // The rAF guard ensures at most one canvas composite per frame.
+    const unsub1 = useEditorStore.subscribe(schedule)
+    const unsub2 = useViewportStore.subscribe(schedule)
     schedule() // draw immediately on mount / map-dimension change
 
     return () => {
-      unsubscribe()
+      unsub1()
+      unsub2()
       if (rafId !== null) {
         cancelAnimationFrame(rafId)
         rafId = null

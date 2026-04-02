@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { createJSONStorage, persist } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
 import { buildMapTexture, updateMapPixels } from '../lib/mapTexture'
+import { useViewportStore } from './viewportStore'
 
 export const MAX_LAND_TILES = 3_000_000
 
@@ -125,43 +126,19 @@ type EditorStoreState = {
   brushSize: number
   elevationValue: number
   nationName: string
-  zoom: number
-  panX: number
-  panY: number
-  /** Current number of land tiles — updated on commitPaint / project load. */
   landTileCount: number
-  /** CSS-pixel dimensions of the map canvas — updated by the renderer. */
-  viewportWidth: number
-  viewportHeight: number
-  /** Set true when a new blank project is created so renderer fits it to view. */
-  pendingFitToView: boolean
   renderRevision: number
-  isPanning: boolean
-  panStartX: number
-  panStartY: number
-  projectStartPanX: number
-  projectStartPanY: number
   createBlankProject: (width?: number, height?: number) => void
   setTool: (tool: EditorTool) => void
   setBrushSize: (brushSize: number) => void
   setElevationValue: (value: number) => void
   setNationName: (name: string) => void
-  setZoom: (zoom: number) => void
-  setPan: (panX: number, panY: number) => void
-  /** Set zoom and pan in a single Immer/Zustand call to avoid double React re-renders. */
-  setZoomAndPan: (zoom: number, panX: number, panY: number) => void
-  setViewport: (width: number, height: number) => void
-  clearFitToView: () => void
-  startPan: (clientX: number, clientY: number) => void
-  movePan: (clientX: number, clientY: number) => void
-  endPan: () => void
   paintAt: (tileX: number, tileY: number) => void
   commitPaint: () => void
   addNationAt: (tileX: number, tileY: number) => void
   removeNation: (nationId: string) => void
   setProjectName: (name: string) => void
   setProjectMetadata: (key: keyof MapMetadata, value: string) => void
-  /** Replace the current project with a fully-formed MapProject (e.g. from image import). */
   loadProject: (project: MapProject) => void
 }
 
@@ -224,70 +201,90 @@ function createNationId() {
   return `nation-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
-/**
- * A localStorage wrapper that:
- * 1. Silently swallows QuotaExceededError
- * 2. Debounces writes so rapid state updates (e.g. brush strokes) don't hammer
- *    the serialization pipeline on every pointer-move event.
- */
-let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null
-const PERSIST_DEBOUNCE_MS = 500 // write at most once per 500 ms
+// Partialize returns raw MapProject (not serialized).
+type PartializedEditorState = {
+  project: MapProject
+  tool: EditorTool
+  brushSize: number
+  elevationValue: number
+  nationName: string
+}
 
-const safeLocalStorage = {
-  getItem: (name: string): string | null => {
+/**
+ * Deferred-serialization persist storage.
+ *
+ * The key optimization: partialize() returns the raw MapProject (no base64
+ * encoding), and setItem() defers the expensive serializeProject() +
+ * JSON.stringify() work into a debounced setTimeout. This means every
+ * setState call on the editor store is O(1), not O(map-size).
+ *
+ * Without this, Zustand's persist middleware called partialize() +
+ * JSON.stringify(serializeProject(...)) synchronously on EVERY setState,
+ * causing ~100ms+ of main-thread blocking on each zoom/pan/paint event
+ * for large maps.
+ */
+let persistDeferTimer: ReturnType<typeof setTimeout> | null = null
+const PERSIST_DEBOUNCE_MS = 1000
+
+const deferredStorage = {
+  getItem(name: string): { state: PartializedEditorState; version?: number } | null {
     try {
-      return localStorage.getItem(name)
+      const raw = localStorage.getItem(name)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as {
+        state: { project: SerializedProject | MapProject } & Omit<PartializedEditorState, 'project'>
+        version?: number
+      }
+      return {
+        state: {
+          ...parsed.state,
+          project: deserializeProject(parsed.state.project),
+        },
+        version: parsed.version,
+      }
     } catch {
       return null
     }
   },
-  setItem: (name: string, value: string): void => {
-    // Debounce: cancel previous pending write and schedule a new one
-    if (persistDebounceTimer !== null) {
-      clearTimeout(persistDebounceTimer)
-    }
-    persistDebounceTimer = setTimeout(() => {
-      persistDebounceTimer = null
+  setItem(name: string, value: { state: PartializedEditorState; version?: number }): void {
+    if (persistDeferTimer !== null) clearTimeout(persistDeferTimer)
+    persistDeferTimer = setTimeout(() => {
+      persistDeferTimer = null
       try {
-        localStorage.setItem(name, value)
+        const serializable = {
+          ...value,
+          state: {
+            ...value.state,
+            project: serializeProject(value.state.project),
+          },
+        }
+        localStorage.setItem(name, JSON.stringify(serializable))
       } catch {
-        // QuotaExceededError — map is too large to persist; ignore silently.
+        // QuotaExceededError — map too large; ignore silently
       }
     }, PERSIST_DEBOUNCE_MS)
   },
-  removeItem: (name: string): void => {
+  removeItem(name: string): void {
     try {
       localStorage.removeItem(name)
     } catch {
-      // Ignore.
+      // Ignore
     }
   },
-}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any
 
 export const useEditorStore = create<EditorStoreState>()(
   persist(
-    immer((set, get) => ({
+    immer((set) => ({
       project: createBlankProject(),
       tool: 'land',
       brushSize: 1,
       elevationValue: 128,
       nationName: 'Spawn 1',
-      zoom: 1,
-      panX: 0,
-      panY: 0,
       landTileCount: 0,
-      viewportWidth: typeof window !== 'undefined' ? window.innerWidth : 800,
-      viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 600,
-      pendingFitToView: true,
       renderRevision: 0,
-      isPanning: false,
-      panStartX: 0,
-      panStartY: 0,
-      projectStartPanX: 0,
-      projectStartPanY: 0,
       createBlankProject: (width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) => {
-        // Build the map texture BEFORE updating the store so the pixel buffer
-        // is ready by the time the next render frame fires.
         const newProject = createBlankProject(width, height)
         buildMapTexture(newProject)
         _landTileCount = 0
@@ -295,9 +292,9 @@ export const useEditorStore = create<EditorStoreState>()(
           state.project = newProject
           state.tool = 'land'
           state.landTileCount = 0
-          state.pendingFitToView = true
           state.renderRevision = (state.renderRevision ?? 0) + 1
         })
+        useViewportStore.setState({ pendingFitToView: true })
       },
       setTool: (tool) =>
         set((state) => {
@@ -315,74 +312,17 @@ export const useEditorStore = create<EditorStoreState>()(
         set((state) => {
           state.nationName = name
         }),
-      setZoom: (zoom) =>
-        set((state) => {
-          state.zoom = Math.max(0.05, Math.min(6, zoom))
-        }),
-      setPan: (panX, panY) =>
-        set((state) => {
-          state.panX = panX
-          state.panY = panY
-        }),
-      setZoomAndPan: (zoom, panX, panY) =>
-        set((state) => {
-          state.zoom = Math.max(0.05, Math.min(6, zoom))
-          state.panX = panX
-          state.panY = panY
-        }),
-      setViewport: (width, height) =>
-        set((state) => {
-          state.viewportWidth = width
-          state.viewportHeight = height
-        }),
-      clearFitToView: () =>
-        set((state) => {
-          state.pendingFitToView = false
-        }),
-      startPan: (clientX, clientY) => {
-        const { panX, panY } = get()
-        set((state) => {
-          state.isPanning = true
-          state.panStartX = clientX
-          state.panStartY = clientY
-          state.projectStartPanX = panX
-          state.projectStartPanY = panY
-        })
-      },
-      movePan: (clientX, clientY) => {
-        const { isPanning, panStartX, panStartY, projectStartPanX, projectStartPanY } = get()
-        if (!isPanning) {
-          return
-        }
-
-        const dx = clientX - panStartX
-        const dy = clientY - panStartY
-
-        set((state) => {
-          state.panX = projectStartPanX + dx
-          state.panY = projectStartPanY + dy
-        })
-      },
-      endPan: () =>
-        set((state) => {
-          state.isPanning = false
-        }),
       paintAt: (tileX, tileY) => {
-        // Kept for test compatibility.  Hot-path painting uses paintTilesDirect.
         paintTilesDirect(tileX, tileY)
       },
       commitPaint: () =>
         set((state) => {
-          // Signal persist middleware after a paint stroke ends.
-          // terrain/magnitude were already mutated in-place by paintTilesDirect;
-          // Immer finalises them with the same references.
           state.landTileCount = _landTileCount
           state.renderRevision = (state.renderRevision ?? 0) + 1
         }),
       addNationAt: (tileX, tileY) =>
         set((state) => {
           const { terrain, width, height } = state.project
-          // Only place nations on land tiles
           if (tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) return
           if (terrain[tileY * width + tileX] !== 1) return
 
@@ -404,12 +344,10 @@ export const useEditorStore = create<EditorStoreState>()(
       setProjectName: (name) =>
         set((state) => {
           state.project.name = name
-          // Name change doesn't affect visual rendering — no renderRevision bump needed
         }),
       setProjectMetadata: (key, value) =>
         set((state) => {
           state.project.metadata[key] = value
-          // Metadata changes don't affect visual rendering — no renderRevision bump needed
         }),
       loadProject: (project) => {
         buildMapTexture(project)
@@ -417,27 +355,22 @@ export const useEditorStore = create<EditorStoreState>()(
         set((state) => {
           state.project = project
           state.landTileCount = _landTileCount
-          state.pendingFitToView = true
           state.renderRevision = (state.renderRevision ?? 0) + 1
         })
+        useViewportStore.setState({ pendingFitToView: true })
       },
     })),
     {
       name: 'openfront-editor-state',
-      storage: createJSONStorage(() => safeLocalStorage),
+      storage: deferredStorage,
       partialize: (state) => ({
-        project: serializeProject(state.project),
+        project: state.project,
         tool: state.tool,
         brushSize: state.brushSize,
         elevationValue: state.elevationValue,
         nationName: state.nationName,
-        zoom: state.zoom,
-        panX: state.panX,
-        panY: state.panY,
       }),
       onRehydrateStorage: () => (state) => {
-        // After localStorage data is parsed and merged, ensure the map texture
-        // pixel buffer is built for the loaded (or initial) project.
         if (state?.project) {
           buildMapTexture(state.project)
           _landTileCount = countLandTiles(state.project.terrain)
@@ -453,8 +386,6 @@ export const useEditorStore = create<EditorStoreState>()(
           ...currentState,
           ...saved,
           project: saved.project ? deserializeProject(saved.project) : currentState.project,
-          // Rehydrated projects restore saved zoom/pan — no need to re-fit.
-          pendingFitToView: false,
         }
       },
     },
