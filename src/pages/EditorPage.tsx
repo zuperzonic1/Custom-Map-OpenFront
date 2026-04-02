@@ -1,6 +1,6 @@
 import React from 'react'
 import '../App.css'
-import { buildExportBundle, downloadBlob } from '../lib/exportMap'
+import { buildExportBundle, buildExportPng, downloadBlob } from '../lib/exportMap'
 import { useEditorStore } from '../store/editorStore'
 import { PixiMapEditor as PixiCanvas } from '../lib/pixiMapRenderer'
 import { ControlsPanel } from '../components/ControlsPanel'
@@ -32,15 +32,27 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
 
   const handleExportMap = async (): Promise<void> => {
     setExportStatus('Exporting…')
-
     try {
       const { project } = useEditorStore.getState()
-      const bundle = await buildExportBundle(project, null)
+      const bundle = await buildExportBundle(project)
       downloadBlob(bundle.zipBlob, `${project.name || 'openfront-map'}.zip`)
       setExportFiles(bundle.fileNames)
       setExportStatus('Export complete')
     } catch {
       setExportStatus('Export failed')
+    }
+  }
+
+  const handleExportPng = async (): Promise<void> => {
+    setExportStatus('Exporting PNG…')
+    setExportFiles([])
+    try {
+      const { project } = useEditorStore.getState()
+      const blob = await buildExportPng(project)
+      downloadBlob(blob, `${project.name || 'openfront-map'}.png`)
+      setExportStatus('PNG export complete')
+    } catch {
+      setExportStatus('PNG export failed')
     }
   }
 
@@ -84,11 +96,12 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
           </div>
         </main>
 
-        <InfoPanel
-          exportStatus={exportStatus}
-          exportFiles={exportFiles}
-          onExportMap={() => void handleExportMap()}
-        />
+          <InfoPanel
+            exportStatus={exportStatus}
+            exportFiles={exportFiles}
+            onExportMap={() => void handleExportMap()}
+            onExportPng={() => void handleExportPng()}
+          />
       </section>
     </div>
   )

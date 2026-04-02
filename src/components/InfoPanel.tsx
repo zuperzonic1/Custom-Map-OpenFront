@@ -3,12 +3,14 @@ import { useEditorStore } from '../store/editorStore'
 
 export interface InfoPanelProps {
   onExportMap?: () => void
+  onExportPng?: () => void
   exportStatus: string
   exportFiles: string[]
 }
 
 export function InfoPanel({
   onExportMap,
+  onExportPng,
   exportStatus,
   exportFiles,
 }: InfoPanelProps): React.ReactElement {
@@ -29,6 +31,7 @@ export function InfoPanel({
 
       <ExportSection
         onExportMap={onExportMap}
+        onExportPng={onExportPng}
         exportStatus={exportStatus}
         exportFiles={exportFiles}
       />
@@ -295,10 +298,12 @@ function Minimap({
 
 function ExportSection({
   onExportMap,
+  onExportPng,
   exportStatus,
   exportFiles,
 }: {
   onExportMap?: () => void
+  onExportPng?: () => void
   exportStatus: string
   exportFiles: string[]
 }): React.ReactElement {
@@ -306,11 +311,18 @@ function ExportSection({
     <div className="status-card">
       <h3>Export</h3>
       <p>{exportStatus}</p>
-      {onExportMap && (
-        <button type="button" className="secondary" onClick={onExportMap}>
-          Export ZIP
-        </button>
-      )}
+      <div className="button-group">
+        {onExportMap && (
+          <button type="button" className="secondary" onClick={onExportMap}>
+            Map Files
+          </button>
+        )}
+        {onExportPng && (
+          <button type="button" className="secondary" onClick={onExportPng}>
+            PNG
+          </button>
+        )}
+      </div>
       {exportFiles.length > 0 ? (
         <ul className="nations-list export-list">
           {exportFiles.map((fileName) => (
