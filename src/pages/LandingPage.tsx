@@ -45,6 +45,11 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
     <div className="landing">
       {/* ── hero ───────────────────────────────── */}
       <section className="landing-hero">
+        <img 
+          src="/Openfront-Editor-Logo.png" 
+          alt="OpenFront Editor Logo" 
+          className="landing-logo"
+        />
         <p className="eyebrow">OpenFront Custom Map Editor</p>
         <h1>
           Build your own <span>OpenFront map</span>

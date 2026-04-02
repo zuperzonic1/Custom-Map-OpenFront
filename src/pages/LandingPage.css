@@ -14,6 +14,13 @@
   max-width: 680px;
 }
 
+.landing-logo {
+  display: block;
+  width: 150px;
+  height: auto;
+  margin: 0 auto 24px;
+}
+
 .landing-hero .eyebrow {
   margin-bottom: 16px;
   font-size: 13px;

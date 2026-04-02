@@ -20,6 +20,18 @@
   box-shadow: var(--shadow);
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.editor-logo {
+  width: 48px;
+  height: auto;
+  flex-shrink: 0;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   text-transform: uppercase;

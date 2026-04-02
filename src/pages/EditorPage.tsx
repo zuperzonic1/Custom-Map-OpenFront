@@ -59,9 +59,16 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">OpenFront map editor</p>
-          <h1>Map Editor</h1>
+        <div className="topbar-left">
+          <img 
+            src="/Openfront-Editor-Logo.png" 
+            alt="OpenFront Editor Logo" 
+            className="editor-logo"
+          />
+          <div>
+            <p className="eyebrow">OpenFront map editor</p>
+            <h1>Map Editor</h1>
+          </div>
         </div>
 
         <div className="topbar-actions">
