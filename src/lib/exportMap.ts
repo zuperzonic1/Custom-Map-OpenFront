@@ -93,7 +93,7 @@ function getConnectedArea(
     const idx = queue[head++]
     area.push(idx)
     const x = idx % width
-    const y = (idx / width) | 0
+    const y = Math.trunc(idx / width)
 
     if (x > 0) {
       const n = idx - 1
@@ -188,7 +188,7 @@ function processWater(g: FlatGrid, removeSmall = false): void {
   for (let idx = 0; idx < size; idx++) {
     const t = terrain[idx]
     const x = idx % width
-    const y = (idx / width) | 0
+    const y = Math.trunc(idx / width)
     let adj = false
     if (x > 0 && terrain[idx - 1] !== t) adj = true
     else if (x < width - 1 && terrain[idx + 1] !== t) adj = true
@@ -213,7 +213,7 @@ function processWater(g: FlatGrid, removeSmall = false): void {
     const idx = bfsQueue[bfsHead++]
     const dist = mag[idx]
     const x = idx % width
-    const y = (idx / width) | 0
+    const y = Math.trunc(idx / width)
     if (x > 0 && !distVisited[idx - 1] && terrain[idx - 1] === 0) {
       distVisited[idx - 1] = 1; mag[idx - 1] = dist + 1; bfsQueue.push(idx - 1)
     }
@@ -238,18 +238,18 @@ function processWater(g: FlatGrid, removeSmall = false): void {
  */
 function createMiniGrid(g: FlatGrid): FlatGrid {
   const { terrain, mag, width, height } = g
-  const mw = (width / 2) | 0
-  const mh = (height / 2) | 0
+  const mw = Math.trunc(width / 2)
+  const mh = Math.trunc(height / 2)
   const mSize = mw * mh
   const mTerrain = new Uint8Array(mSize).fill(1) // all land initially
   const mMag = new Float32Array(mSize)
   const mFlags = new Uint8Array(mSize)
 
   for (let y = 0; y < height; y++) {
-    const my = (y / 2) | 0
+    const my = Math.trunc(y / 2)
     if (my >= mh) continue
     for (let x = 0; x < width; x++) {
-      const mx = (x / 2) | 0
+      const mx = Math.trunc(x / 2)
       if (mx >= mw) continue
       const mIdx = my * mw + mx
       if (mTerrain[mIdx] === 1) {
@@ -369,7 +369,7 @@ function promiseCanvasBlob(canvas: HTMLCanvasElement, type: string, quality?: nu
 }
 
 function createFolderName(project: MapProject): string {
-  return project.name.toLowerCase().replace(/\s+/g, '') || 'map'
+  return project.name.toLowerCase().replaceAll(/\s+/g, '') || 'map'
 }
 
 // ─── Main export entry point ──────────────────────────────────────────────────
@@ -508,5 +508,5 @@ export function downloadBlob(blob: Blob, filename: string): void {
   anchor.href = url
   anchor.download = filename
   anchor.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  globalThis.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
