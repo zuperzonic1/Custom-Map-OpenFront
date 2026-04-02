@@ -1,8 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CanvasRenderer, Container, Sprite, Texture } from 'pixi.js'
-import { useEditorStore } from '../store/editorStore'
-import { getChunkCanvas, CHUNK_SIZE } from './tileChunkCache'
+import { autoDetectRenderer, Container, Sprite, Texture, type Renderer } from 'pixi.js'
+import { useEditorStore, paintTilesDirect } from '../store/editorStore'
+import {
+  mapCanvas,
+  mapCanvasVersion,
+  consumeTextureUpload,
+  buildMapTexture,
+} from './mapTexture'
 
 export type PixiMapOptions = {
   width: number
@@ -10,9 +15,7 @@ export type PixiMapOptions = {
   tileSize: number
 }
 
-const BASE_TILE_SIZE = 14
-// Extra chunks rendered beyond the visible edge to avoid popping during fast pans
-const CULL_MARGIN = 1
+export const BASE_TILE_SIZE = 14
 
 // ─── Nation marker helpers ────────────────────────────────────────────────────
 
@@ -54,94 +57,134 @@ function createNationContainer(x: number, y: number, tileSize: number): Containe
   return container
 }
 
-// ─── Texture cache (WeakMap keyed by HTMLCanvasElement reference) ─────────────
-//
-// tileChunkCache returns a STABLE canvas reference until a chunk is
-// invalidated, at which point a FRESH canvas is returned.  We therefore key
-// the texture cache by the canvas object itself: same canvas ⟹ same texture,
-// new canvas ⟹ new texture (old entry is GC'd via WeakMap).
-
-const chunkTextureMap = new WeakMap<HTMLCanvasElement, Texture>()
-
-function getChunkTexture(canvas: HTMLCanvasElement): Texture {
-  let texture = chunkTextureMap.get(canvas)
-  if (!texture) {
-    texture = Texture.from(canvas)
-    // Nearest-neighbour: sharp pixel art upscaling, no bilinear blur.
-    texture.source.scaleMode = 'nearest'
-    chunkTextureMap.set(canvas, texture)
-  }
-  return texture
-}
-
-// ─── Per-chunk sprite pool entry ─────────────────────────────────────────────
-
-interface ChunkSpriteEntry {
-  sprite: Sprite
-  /** The canvas reference used to build the current texture. */
-  canvas: HTMLCanvasElement
-}
-
 // ─── Main renderer hook ───────────────────────────────────────────────────────
 
 export function usePixiMapRenderer(
-  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  containerRef: React.RefObject<HTMLDivElement | null>,
   options: PixiMapOptions,
 ) {
-  const rendererRef = useRef<CanvasRenderer | null>(null)
+  const rendererRef = useRef<Renderer | null>(null)
   const worldContainerRef = useRef<Container | null>(null)
   const nationContainerRef = useRef<Container | null>(null)
 
   /**
-   * Persistent pool of chunk sprites.  Keyed "cx,cy".
-   * Sprites are created when a chunk enters the viewport and destroyed only
-   * when it leaves — never on every pan/zoom frame.
+   * Pixi's injected canvas — used for pointer hit-testing
+   * (getBoundingClientRect).
    */
-  const chunkSpriteMapRef = useRef(new Map<string, ChunkSpriteEntry>())
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  /** rAF handle; null means no frame is currently scheduled. */
+  /** The single sprite that displays the entire map. */
+  const mapSpriteRef = useRef<Sprite | null>(null)
+
+  /** The Pixi Texture wrapping mapCanvas. Recreated when mapCanvasVersion
+   *  changes (i.e. the project dimensions changed). */
+  const mapTextureRef = useRef<Texture | null>(null)
+
+  /** mapCanvasVersion value at the time the current texture was created. */
+  const lastMapCanvasVersionRef = useRef(-1)
+
+  /** rAF handle for the continuous render loop. */
   const rafIdRef = useRef<number | null>(null)
 
-  /**
-   * The renderRevision value from the last time we rebuilt nation markers.
-   * Nations are only rebuilt when this differs from the store's current value.
-   */
+  /** renderRevision value from the last nation-marker rebuild. */
   const lastRenderRevisionRef = useRef<number>(-1)
+
+  // FPS tracking
+  const fpsFrameCountRef = useRef(0)
+  const fpsLastTimeRef = useRef(0)
+  const [fps, setFps] = useState(0)
 
   const [isReady, setIsReady] = useState(false)
 
   const baseTileSize = options.tileSize || BASE_TILE_SIZE
 
+  // ── Fit-map-to-view helper ──────────────────────────────────────────────────
+  const fitMapToView = useCallback(() => {
+    const renderer = rendererRef.current
+    if (!renderer) return
+    const store = useEditorStore.getState()
+    const { project } = store
+    const vw = renderer.screen.width
+    const vh = renderer.screen.height
+    const fitZoom = Math.min(
+      6,
+      Math.max(0.05, Math.min(vw / (project.width * baseTileSize), vh / (project.height * baseTileSize))),
+    )
+    const panX = (vw - project.width * baseTileSize * fitZoom) / 2
+    const panY = (vh - project.height * baseTileSize * fitZoom) / 2
+    store.setZoom(fitZoom)
+    store.setPan(panX, panY)
+  }, [baseTileSize])
+
   // ── Renderer init / teardown ────────────────────────────────────────────────
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const container = containerRef.current
+    if (!container) return
 
     let destroyed = false
 
     const init = async () => {
-      const renderer = new CanvasRenderer()
-      const parent = canvas.parentElement
-      await renderer.init({
-        canvas,
-        width: parent?.clientWidth ?? options.width,
-        height: parent?.clientHeight ?? options.height,
+      // Belt-and-suspenders: ensure the pixel buffer exists before creating the
+      // GPU texture.  onRehydrateStorage in editorStore should have done this
+      // already, but guard anyway.
+      if (!mapCanvas) {
+        buildMapTexture(useEditorStore.getState().project)
+      }
+
+      const rendererOptions = {
+        // Do NOT pass canvas — Pixi owns it to avoid WebGL context conflicts on
+        // React StrictMode double-invoke.
+        width: container.clientWidth || options.width,
+        height: container.clientHeight || options.height,
         autoDensity: true,
         resolution: window.devicePixelRatio || 1,
         backgroundColor: 0x0f172a,
         antialias: false,
-      })
+      }
+
+      let renderer
+      try {
+        renderer = await autoDetectRenderer(rendererOptions)
+      } catch (e) {
+        console.warn('[PixiMap] Hardware renderer failed, falling back to canvas:', e)
+        renderer = await autoDetectRenderer({ ...rendererOptions, preference: 'canvas' })
+      }
 
       if (destroyed) {
-        renderer.destroy()
+        renderer.destroy(true)
         return
       }
 
+      // Inject Pixi's canvas into our container div.
+      const pixiCanvas = renderer.canvas as HTMLCanvasElement
+      pixiCanvas.style.display = 'block'
+      pixiCanvas.style.width = '100%'
+      pixiCanvas.style.height = '100%'
+      container.prepend(pixiCanvas)
+      canvasRef.current = pixiCanvas
+
+      // ── Single map sprite ──────────────────────────────────────────────────
+      //
+      // The map canvas is projectWidth × projectHeight pixels (1 px per tile).
+      // Scale the sprite by baseTileSize so 1 canvas pixel = 1 tile in world
+      // space.  worldContainer.scale = zoom handles the screen-space scaling.
+      const currentCanvas = mapCanvas!
+      const texture = Texture.from(currentCanvas)
+      texture.source.scaleMode = 'nearest'
+      mapTextureRef.current = texture
+      lastMapCanvasVersionRef.current = mapCanvasVersion
+
+      const mapSprite = new Sprite(texture)
+      mapSprite.x = 0
+      mapSprite.y = 0
+      mapSprite.scale.set(baseTileSize)
+      mapSpriteRef.current = mapSprite
+
       const worldContainer = new Container()
       worldContainer.label = 'world-container'
+      worldContainer.addChild(mapSprite)
 
-      // Nation markers live in a dedicated child container so they always
-      // render on top of chunk sprites regardless of draw order.
+      // Nation markers in a dedicated child so they always render on top.
       const nationContainer = new Container()
       nationContainer.label = 'nation-container'
       worldContainer.addChild(nationContainer)
@@ -149,6 +192,11 @@ export function usePixiMapRenderer(
       rendererRef.current = renderer
       worldContainerRef.current = worldContainer
       nationContainerRef.current = nationContainer
+
+      // Tell the store the initial viewport size so the minimap viewport
+      // indicator is correct before the first ResizeObserver fires.
+      useEditorStore.getState().setViewport(renderer.screen.width, renderer.screen.height)
+
       setIsReady(true)
     }
 
@@ -158,132 +206,82 @@ export function usePixiMapRenderer(
       destroyed = true
       setIsReady(false)
 
-      // Cancel any pending frame before teardown.
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
       }
 
-      // Destroy all pooled chunk sprites.
-      chunkSpriteMapRef.current.forEach(({ sprite }) => sprite.destroy())
-      chunkSpriteMapRef.current.clear()
+      // Destroy the GPU texture (does NOT destroy the backing mapCanvas —
+      // that belongs to mapTexture.ts and is reused across remounts).
+      if (mapTextureRef.current) {
+        mapTextureRef.current.destroy(false)
+        mapTextureRef.current = null
+      }
+      mapSpriteRef.current = null
 
       if (rendererRef.current) {
-        rendererRef.current.destroy()
+        if (canvasRef.current?.parentElement) {
+          canvasRef.current.parentElement.removeChild(canvasRef.current)
+        }
+        canvasRef.current = null
+        rendererRef.current.destroy(true)
         rendererRef.current = null
       }
 
       worldContainerRef.current = null
       nationContainerRef.current = null
       lastRenderRevisionRef.current = -1
+      lastMapCanvasVersionRef.current = -1
     }
-  }, [canvasRef])
+  }, [containerRef]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Core render function ────────────────────────────────────────────────────
-  /**
-   * Performs one render pass.  Reads zoom/pan/renderRevision directly from the
-   * store so it always uses the latest values regardless of how many state
-   * updates were batched before this frame fired.
-   *
-   * Work done per frame:
-   *   1. Update worldContainer transform  (O(1) — just sets two numbers)
-   *   2. Compute visible chunk range      (O(1))
-   *   3. Remove off-screen sprites        (O(chunks leaving viewport) ≈ 0 for pan)
-   *   4. Add/update on-screen sprites     (O(chunks entering viewport) ≈ 0 for pan)
-   *   5. Rebuild nation markers           (only when renderRevision changes)
-   *   6. renderer.render()                (draw call)
-   */
   const renderFrame = useCallback(() => {
     const renderer = rendererRef.current
     const worldContainer = worldContainerRef.current
     const nationContainer = nationContainerRef.current
-    const canvas = canvasRef.current
-    if (!renderer || !worldContainer || !nationContainer || !canvas) return
+    if (!renderer || !worldContainer || !nationContainer) return
 
     const store = useEditorStore.getState()
-    const { zoom, panX, panY, renderRevision } = store
-    const { width: projectWidth, height: projectHeight } = store.project
+    const { zoom, panX, panY, renderRevision, pendingFitToView } = store
 
-    // 1. Transform — always cheap.
+    // 0. Fit the entire map into the viewport when a new project was created.
+    if (pendingFitToView) {
+      fitMapToView()
+      store.clearFitToView()
+    }
+
+    // 1. Apply world transform — always cheap.
     worldContainer.scale.set(zoom)
     worldContainer.position.set(panX, panY)
 
-    // 2. Visible chunk range.
-    const viewW = canvas.clientWidth || renderer.width / (renderer.resolution || 1)
-    const viewH = canvas.clientHeight || renderer.height / (renderer.resolution || 1)
-    const scaledTile = baseTileSize * zoom
+    // 2. If the project dimensions changed (new project was created/loaded),
+    //    mapCanvasVersion will have incremented.  Swap to the new texture so
+    //    the sprite shows the new map.
+    if (mapCanvas && mapCanvasVersion !== lastMapCanvasVersionRef.current) {
+      const oldTexture = mapTextureRef.current
+      const newTexture = Texture.from(mapCanvas)
+      newTexture.source.scaleMode = 'nearest'
 
-    const startTileX = Math.max(0, Math.floor(-panX / scaledTile))
-    const startTileY = Math.max(0, Math.floor(-panY / scaledTile))
-    const endTileX = Math.min(projectWidth, Math.ceil((viewW - panX) / scaledTile))
-    const endTileY = Math.min(projectHeight, Math.ceil((viewH - panY) / scaledTile))
-
-    const startCX = Math.max(0, Math.floor(startTileX / CHUNK_SIZE) - CULL_MARGIN)
-    const startCY = Math.max(0, Math.floor(startTileY / CHUNK_SIZE) - CULL_MARGIN)
-    const endCX = Math.min(
-      Math.ceil(projectWidth / CHUNK_SIZE),
-      Math.ceil(endTileX / CHUNK_SIZE) + CULL_MARGIN,
-    )
-    const endCY = Math.min(
-      Math.ceil(projectHeight / CHUNK_SIZE),
-      Math.ceil(endTileY / CHUNK_SIZE) + CULL_MARGIN,
-    )
-
-    // Build the set of keys that SHOULD be visible this frame.
-    const visibleKeys = new Set<string>()
-    for (let cy = startCY; cy < endCY; cy++) {
-      for (let cx = startCX; cx < endCX; cx++) {
-        visibleKeys.add(`${cx},${cy}`)
+      if (mapSpriteRef.current) {
+        mapSpriteRef.current.texture = newTexture
+        mapSpriteRef.current.scale.set(baseTileSize)
       }
+
+      mapTextureRef.current = newTexture
+      // Destroy old GPU resource but NOT its source — if the old canvas is
+      // gone, we don't want to touch it; if it's the same, we need it.
+      oldTexture?.destroy(false)
+      lastMapCanvasVersionRef.current = mapCanvasVersion
     }
 
-    const spriteMap = chunkSpriteMapRef.current
-
-    // 3. Remove sprites for chunks that left the viewport.
-    for (const [key, { sprite }] of spriteMap) {
-      if (!visibleKeys.has(key)) {
-        worldContainer.removeChild(sprite)
-        sprite.destroy()
-        spriteMap.delete(key)
-      }
+    // 3. Re-upload the canvas texture to the GPU if tile data was painted this
+    //    frame.  consumeTextureUpload() resets the flag — call exactly once.
+    if (consumeTextureUpload() && mapTextureRef.current) {
+      mapTextureRef.current.source.update()
     }
 
-    // 4. Add or update sprites for currently visible chunks.
-    //
-    //    Chunk sprites are inserted just before nationContainer so nations
-    //    always appear on top.  nationContainer is always the LAST child of
-    //    worldContainer, so inserting at (children.length - 1) places the new
-    //    sprite immediately before it.
-    for (let cy = startCY; cy < endCY; cy++) {
-      for (let cx = startCX; cx < endCX; cx++) {
-        const key = `${cx},${cy}`
-        const chunkCanvas = getChunkCanvas(store.project, cx, cy)
-        const existing = spriteMap.get(key)
-
-        if (existing) {
-          // Sprite already exists.  Only swap the texture if the chunk was
-          // invalidated (the LRU cache returned a fresh canvas reference).
-          if (existing.canvas !== chunkCanvas) {
-            existing.sprite.texture = getChunkTexture(chunkCanvas)
-            existing.canvas = chunkCanvas
-          }
-          // Position/scale are in baseTileSize units — they never change.
-        } else {
-          // New chunk entering the viewport.
-          const texture = getChunkTexture(chunkCanvas)
-          const sprite = new Sprite(texture)
-          sprite.x = cx * CHUNK_SIZE * baseTileSize
-          sprite.y = cy * CHUNK_SIZE * baseTileSize
-          // Scale from the 1px-per-tile canvas up to baseTileSize px-per-tile.
-          sprite.scale.set(baseTileSize)
-          // Insert before nationContainer (always the last child).
-          worldContainer.addChildAt(sprite, worldContainer.children.length - 1)
-          spriteMap.set(key, { sprite, canvas: chunkCanvas })
-        }
-      }
-    }
-
-    // 5. Rebuild nation markers only when the project content changed.
+    // 4. Rebuild nation markers only when the project content changed.
     if (renderRevision !== lastRenderRevisionRef.current) {
       nationContainer
         .removeChildren()
@@ -294,69 +292,80 @@ export function usePixiMapRenderer(
       lastRenderRevisionRef.current = renderRevision
     }
 
-    // 6. Draw.
+    // 5. Draw — one draw call for the map sprite + one for each nation marker.
     renderer.render(worldContainer)
-  }, [baseTileSize, canvasRef])
 
-  /**
-   * Schedule renderFrame on the next animation frame.
-   *
-   * Multiple calls within the same JS task are coalesced — only ONE frame is
-   * ever queued at a time.  This prevents redundant re-renders when zoom AND
-   * panX AND panY all update synchronously (e.g. from handleWheel).
-   */
-  const scheduleRender = useCallback(() => {
-    if (rafIdRef.current !== null) return // frame already queued
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null
+    // 6. FPS counter — updated once per second.
+    const now = performance.now()
+    fpsFrameCountRef.current += 1
+    if (fpsLastTimeRef.current === 0) fpsLastTimeRef.current = now
+    const elapsed = now - fpsLastTimeRef.current
+    if (elapsed >= 1000) {
+      setFps(Math.round((fpsFrameCountRef.current * 1000) / elapsed))
+      fpsFrameCountRef.current = 0
+      fpsLastTimeRef.current = now
+    }
+  }, [baseTileSize, fitMapToView])
+
+  // ── Continuous render loop ───────────────────────────────────────────────────
+  // Reads the latest Zustand state every tick — zero React-subscription latency
+  // on paint / pan / zoom.
+  useEffect(() => {
+    if (!isReady) return
+    let running = true
+    const loop = () => {
+      if (!running) return
       renderFrame()
+      rafIdRef.current = requestAnimationFrame(loop)
+    }
+    rafIdRef.current = requestAnimationFrame(loop)
+    return () => {
+      running = false
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+    }
+  }, [isReady, renderFrame])
+
+  // ── ResizeObserver — keep renderer in sync with container size ───────────────
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry || !rendererRef.current) return
+      const { width, height } = entry.contentRect
+        if (width > 0 && height > 0) {
+          rendererRef.current.resize(width, height)
+          useEditorStore.getState().setViewport(width, height)
+        }
     })
-  }, [renderFrame])
 
-  /**
-   * Public API consumed by the PixiMapEditor component.
-   * Parameters are accepted for interface compatibility but the actual values
-   * are read from the store inside renderFrame so they are always fresh.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const renderWithViewport = useCallback(
-    (zoom: number, panX: number, panY: number) => {
-      void zoom; void panX; void panY
-      scheduleRender()
-    },
-    [scheduleRender],
-  )
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [containerRef])
 
-  return {
-    isReady,
-    renderWithViewport,
-  }
+  return { isReady, fps, canvasRef }
 }
 
 // ─── Canvas component ─────────────────────────────────────────────────────────
 
 export function PixiMapEditor() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const zoom = useEditorStore((state) => state.zoom)
-  const panX = useEditorStore((state) => state.panX)
-  const panY = useEditorStore((state) => state.panY)
-  const renderRevision = useEditorStore((state) => state.renderRevision)
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
   const isDrawingRef = useRef(false)
   const isSpacePressedRef = useRef(false)
   const pointerSequenceActiveRef = useRef(false)
 
-  const { isReady, renderWithViewport } = usePixiMapRenderer(canvasRef, {
+  const { fps, canvasRef } = usePixiMapRenderer(containerRef, {
     width: 0,
     height: 0,
     tileSize: BASE_TILE_SIZE,
   })
 
-  useEffect(() => {
-    if (!isReady) return
-    renderWithViewport(zoom, panX, panY)
-  }, [isReady, renderWithViewport, zoom, panX, panY, renderRevision])
-
+  // Key and global pointer-up listeners
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement
@@ -396,36 +405,37 @@ export function PixiMapEditor() {
   }, [])
 
   // Native wheel listener with { passive: false } to suppress page scrolling.
-  const handleWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
+  const handleWheel = useCallback(
+    (event: WheelEvent) => {
+      event.preventDefault()
 
-    const store = useEditorStore.getState()
-    const canvas = canvasRef.current
-    if (!canvas) return
+      const store = useEditorStore.getState()
+      const canvas = canvasRef.current
+      if (!canvas) return
 
-    const rect = canvas.getBoundingClientRect()
-    const factor = Math.exp(-event.deltaY * 0.001)
-    const nextZoom = Math.min(6, Math.max(0.05, store.zoom * factor))
+      const rect = canvas.getBoundingClientRect()
+      const factor = Math.exp(-event.deltaY * 0.001)
+      const nextZoom = Math.min(6, Math.max(0.05, store.zoom * factor))
 
-    const localX = event.clientX - rect.left
-    const localY = event.clientY - rect.top
-    const currentTileSize = BASE_TILE_SIZE * store.zoom
-    const worldX = (localX - store.panX) / currentTileSize
-    const worldY = (localY - store.panY) / currentTileSize
-    const nextPanX = localX - worldX * (BASE_TILE_SIZE * nextZoom)
-    const nextPanY = localY - worldY * (BASE_TILE_SIZE * nextZoom)
+      const localX = event.clientX - rect.left
+      const localY = event.clientY - rect.top
+      const currentTileSize = BASE_TILE_SIZE * store.zoom
+      const worldX = (localX - store.panX) / currentTileSize
+      const worldY = (localY - store.panY) / currentTileSize
+      const nextPanX = localX - worldX * (BASE_TILE_SIZE * nextZoom)
+      const nextPanY = localY - worldY * (BASE_TILE_SIZE * nextZoom)
 
-    useEditorStore.getState().setZoom(nextZoom)
-    useEditorStore.getState().setPan(nextPanX, nextPanY)
-  }, [])
+      store.setZoom(nextZoom)
+      store.setPan(nextPanX, nextPanY)
+    },
+    [canvasRef],
+  )
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    canvas.addEventListener('wheel', handleWheel, { passive: false })
-    return () => {
-      canvas.removeEventListener('wheel', handleWheel)
-    }
+    const container = containerRef.current
+    if (!container) return
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheel)
   }, [handleWheel])
 
   const getTileFromPoint = (clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -447,15 +457,15 @@ export function PixiMapEditor() {
     return { x, y }
   }
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
 
     const store = useEditorStore.getState()
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const container = containerRef.current
+    if (!container) return
 
     pointerSequenceActiveRef.current = true
-    canvas.setPointerCapture(event.pointerId)
+    container.setPointerCapture(event.pointerId)
 
     if (event.button === 1 || isSpacePressedRef.current) {
       isDrawingRef.current = false
@@ -487,32 +497,36 @@ export function PixiMapEditor() {
     if (!tile) return
 
     if (store.tool === 'nation') {
-      useEditorStore.getState().addNationAt(tile.x, tile.y)
+      store.addNationAt(tile.x, tile.y)
       return
     }
 
     isDrawingRef.current = true
-    useEditorStore.getState().paintAt(tile.x, tile.y)
+    paintTilesDirect(tile.x, tile.y)
   }
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isDrawingRef.current) return
     if (useEditorStore.getState().tool === 'nation') return
 
     const tile = getTileFromPoint(event.clientX, event.clientY)
     if (!tile) return
 
-    useEditorStore.getState().paintAt(tile.x, tile.y)
+    paintTilesDirect(tile.x, tile.y)
   }
 
-  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (canvas) {
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const container = containerRef.current
+    if (container) {
       try {
-        canvas.releasePointerCapture(event.pointerId)
+        container.releasePointerCapture(event.pointerId)
       } catch {
         // Ignore if capture was already released.
       }
+    }
+
+    if (isDrawingRef.current) {
+      useEditorStore.getState().commitPaint()
     }
 
     isDrawingRef.current = false
@@ -525,20 +539,18 @@ export function PixiMapEditor() {
   }
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <canvas
-        ref={canvasRef}
-        style={{
-          display: 'block',
-          cursor: 'crosshair',
-          width: '100%',
-          height: '100%',
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onMouseLeave={handleMouseLeave}
-      />
+    <div
+      ref={containerRef}
+      style={{ width: '100%', height: '100%', position: 'relative', cursor: 'crosshair' }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Pixi injects its <canvas> here after async init */}
+      <div className="fps-counter" aria-label="Frames per second">
+        FPS {fps}
+      </div>
     </div>
   )
 }

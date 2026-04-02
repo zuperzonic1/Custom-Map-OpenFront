@@ -1,14 +1,48 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { invalidateAllChunkCache, invalidateChunkCacheForRect } from '../lib/tileChunkCache'
+import { buildMapTexture, updateMapPixels } from '../lib/mapTexture'
+
+/**
+ * Hot-path paint: mutates terrain/magnitude TypedArrays in-place WITHOUT
+ * going through Immer.  After mutating, writes the changed pixels directly
+ * into the shared ImageData buffer (no chunk cache, no LRU, no copy).
+ *
+ * Call commitPaint() on pointerup to bump renderRevision and trigger the
+ * persist middleware so the stroke is saved to localStorage.
+ */
+export function paintTilesDirect(tileX: number, tileY: number): void {
+  const { project, tool, brushSize, elevationValue } = useEditorStore.getState()
+  const radius = Math.max(0, brushSize - 1)
+  const { terrain, magnitude, width, height } = project
+
+  for (let y = tileY - radius; y <= tileY + radius; y++) {
+    if (y < 0 || y >= height) continue
+    for (let x = tileX - radius; x <= tileX + radius; x++) {
+      if (x < 0 || x >= width) continue
+      const index = y * width + x
+      if (tool === 'water') {
+        terrain[index] = 0
+        magnitude[index] = 0
+      } else {
+        terrain[index] = 1
+        magnitude[index] = tool === 'elevation' ? elevationValue : 180
+      }
+    }
+  }
+
+  // Write the painted rect directly into the shared ImageData buffer.
+  updateMapPixels(project, tileX - radius, tileY - radius, tileX + radius, tileY + radius)
+}
 
 // Helper to serialize Uint8Array to base64 for efficient localStorage storage
 function typedArrayToBase64(arr: Uint8Array): string {
+  // Use Blob + FileReader-free path: btoa on chunked binary string
+  // Chunk to avoid call-stack overflow on large arrays
+  const CHUNK = 8192
   let binary = ''
-  const len = arr.length
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(arr[i])
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    binary += String.fromCharCode(...arr.subarray(i, i + CHUNK))
   }
   return btoa(binary)
 }
@@ -65,6 +99,11 @@ type EditorStoreState = {
   zoom: number
   panX: number
   panY: number
+  /** CSS-pixel dimensions of the map canvas — updated by the renderer. */
+  viewportWidth: number
+  viewportHeight: number
+  /** Set true when a new blank project is created so renderer fits it to view. */
+  pendingFitToView: boolean
   renderRevision: number
   isPanning: boolean
   panStartX: number
@@ -78,10 +117,13 @@ type EditorStoreState = {
   setNationName: (name: string) => void
   setZoom: (zoom: number) => void
   setPan: (panX: number, panY: number) => void
+  setViewport: (width: number, height: number) => void
+  clearFitToView: () => void
   startPan: (clientX: number, clientY: number) => void
   movePan: (clientX: number, clientY: number) => void
   endPan: () => void
   paintAt: (tileX: number, tileY: number) => void
+  commitPaint: () => void
   addNationAt: (tileX: number, tileY: number) => void
   removeNation: (nationId: string) => void
   setProjectName: (name: string) => void
@@ -111,7 +153,6 @@ function createBlankProject(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT): Map
 }
 
 function serializeProject(project: MapProject): SerializedProject {
-  // Use base64 encoding for more efficient storage than array of numbers
   return {
     name: project.name,
     width: project.width,
@@ -149,11 +190,14 @@ function createNationId() {
 }
 
 /**
- * A localStorage wrapper that silently swallows QuotaExceededError.
- * Very large maps (e.g. 1500×2000 = 3 MB per array) produce ~8 MB of
- * base64 data that exceeds the typical 5 MB localStorage budget.  Rather
- * than crashing, we simply skip persistence for those saves.
+ * A localStorage wrapper that:
+ * 1. Silently swallows QuotaExceededError
+ * 2. Debounces writes so rapid state updates (e.g. brush strokes) don't hammer
+ *    the serialization pipeline on every pointer-move event.
  */
+let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const PERSIST_DEBOUNCE_MS = 500 // write at most once per 500 ms
+
 const safeLocalStorage = {
   getItem: (name: string): string | null => {
     try {
@@ -163,11 +207,18 @@ const safeLocalStorage = {
     }
   },
   setItem: (name: string, value: string): void => {
-    try {
-      localStorage.setItem(name, value)
-    } catch {
-      // QuotaExceededError — map is too large to persist; ignore silently.
+    // Debounce: cancel previous pending write and schedule a new one
+    if (persistDebounceTimer !== null) {
+      clearTimeout(persistDebounceTimer)
     }
+    persistDebounceTimer = setTimeout(() => {
+      persistDebounceTimer = null
+      try {
+        localStorage.setItem(name, value)
+      } catch {
+        // QuotaExceededError — map is too large to persist; ignore silently.
+      }
+    }, PERSIST_DEBOUNCE_MS)
   },
   removeItem: (name: string): void => {
     try {
@@ -189,22 +240,27 @@ export const useEditorStore = create<EditorStoreState>()(
       zoom: 1,
       panX: 0,
       panY: 0,
+      viewportWidth: typeof window !== 'undefined' ? window.innerWidth : 800,
+      viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 600,
+      pendingFitToView: true,
       renderRevision: 0,
       isPanning: false,
       panStartX: 0,
       panStartY: 0,
       projectStartPanX: 0,
       projectStartPanY: 0,
-      createBlankProject: (width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) =>
+      createBlankProject: (width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) => {
+        // Build the map texture BEFORE updating the store so the pixel buffer
+        // is ready by the time the next render frame fires.
+        const newProject = createBlankProject(width, height)
+        buildMapTexture(newProject)
         set((state) => {
-          invalidateAllChunkCache()
-          state.project = createBlankProject(width, height)
-          state.panX = 0
-          state.panY = 0
-          state.zoom = 1
+          state.project = newProject
           state.tool = 'land'
+          state.pendingFitToView = true
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
+        })
+      },
       setTool: (tool) =>
         set((state) => {
           state.tool = tool
@@ -223,13 +279,21 @@ export const useEditorStore = create<EditorStoreState>()(
         }),
       setZoom: (zoom) =>
         set((state) => {
-          // Allow much smaller zoom so very large maps can be fully visible.
           state.zoom = Math.max(0.05, Math.min(6, zoom))
         }),
       setPan: (panX, panY) =>
         set((state) => {
           state.panX = panX
           state.panY = panY
+        }),
+      setViewport: (width, height) =>
+        set((state) => {
+          state.viewportWidth = width
+          state.viewportHeight = height
+        }),
+      clearFitToView: () =>
+        set((state) => {
+          state.pendingFitToView = false
         }),
       startPan: (clientX, clientY) => {
         const { panX, panY } = get()
@@ -260,42 +324,16 @@ export const useEditorStore = create<EditorStoreState>()(
           state.isPanning = false
         }),
       paintAt: (tileX, tileY) => {
-        const { project, brushSize } = get()
-        const radius = Math.max(0, brushSize - 1)
-        // Invalidate chunk cache for the painted region before mutating state
-        invalidateChunkCacheForRect(
-          project,
-          tileX - radius,
-          tileY - radius,
-          tileX + radius,
-          tileY + radius,
-        )
-        set((state) => {
-          const { tool, elevationValue } = state
-          const { terrain, magnitude } = state.project
-
-          for (let y = tileY - radius; y <= tileY + radius; y += 1) {
-            if (y < 0 || y >= state.project.height) continue
-
-            for (let x = tileX - radius; x <= tileX + radius; x += 1) {
-              if (x < 0 || x >= state.project.width) continue
-
-              const index = y * state.project.width + x
-
-              if (tool === 'water') {
-                terrain[index] = 0
-                magnitude[index] = 0
-                continue
-              }
-
-              terrain[index] = 1
-              magnitude[index] = tool === 'elevation' ? elevationValue : 180
-            }
-          }
-
-          state.renderRevision = (state.renderRevision ?? 0) + 1
-        })
+        // Kept for test compatibility.  Hot-path painting uses paintTilesDirect.
+        paintTilesDirect(tileX, tileY)
       },
+      commitPaint: () =>
+        set((state) => {
+          // Signal persist middleware after a paint stroke ends.
+          // terrain/magnitude were already mutated in-place by paintTilesDirect;
+          // Immer finalises them with the same references.
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        }),
       addNationAt: (tileX, tileY) =>
         set((state) => {
           const label = state.nationName.trim() || `Spawn ${state.project.nations.length + 1}`
@@ -316,12 +354,12 @@ export const useEditorStore = create<EditorStoreState>()(
       setProjectName: (name) =>
         set((state) => {
           state.project.name = name
-          state.renderRevision = (state.renderRevision ?? 0) + 1
+          // Name change doesn't affect visual rendering — no renderRevision bump needed
         }),
       setProjectMetadata: (key, value) =>
         set((state) => {
           state.project.metadata[key] = value
-          state.renderRevision = (state.renderRevision ?? 0) + 1
+          // Metadata changes don't affect visual rendering — no renderRevision bump needed
         }),
     })),
     {
@@ -337,6 +375,11 @@ export const useEditorStore = create<EditorStoreState>()(
         panX: state.panX,
         panY: state.panY,
       }),
+      onRehydrateStorage: () => (state) => {
+        // After localStorage data is parsed and merged, ensure the map texture
+        // pixel buffer is built for the loaded (or initial) project.
+        if (state?.project) buildMapTexture(state.project)
+      },
       merge: (persistedState, currentState) => {
         const saved = persistedState as Partial<EditorStoreState> & {
           project?: SerializedProject | MapProject
@@ -346,6 +389,8 @@ export const useEditorStore = create<EditorStoreState>()(
           ...currentState,
           ...saved,
           project: saved.project ? deserializeProject(saved.project) : currentState.project,
+          // Rehydrated projects restore saved zoom/pan — no need to re-fit.
+          pendingFitToView: false,
         }
       },
     },

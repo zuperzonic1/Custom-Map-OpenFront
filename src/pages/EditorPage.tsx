@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React from 'react'
 import '../App.css'
 import { buildExportBundle, downloadBlob } from '../lib/exportMap'
 import { useEditorStore } from '../store/editorStore'
@@ -17,107 +17,8 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
   const setNationName = useEditorStore((state) => state.setNationName)
   const setElevationValue = useEditorStore((state) => state.setElevationValue)
 
-  const frameRef = useRef<HTMLDivElement | null>(null)
-  const isSpacePressedRef = useRef(false)
-
-  const [fps, setFps] = useState(0)
-  const [exportStatus, setExportStatus] = useState('Idle')
-  const [exportFiles, setExportFiles] = useState<string[]>([])
-
-  const fpsFrameRef = useRef<number | null>(null)
-  const fpsSamplesRef = useRef(0)
-  const fpsLastTickRef = useRef(0)
-
-  useEffect(() => {
-    useEditorStore.getState().setZoom(1)
-    useEditorStore.getState().setPan(0, 0)
-  }, [])
-
-  // Canvas resize observer
-  useEffect(() => {
-    const frame = frameRef.current
-    if (!frame) return
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) return
-    })
-
-    observer.observe(frame)
-    return () => observer.disconnect()
-  }, [])
-
-  // FPS counter
-  useEffect(() => {
-    const tick = (now: number) => {
-      if (fpsLastTickRef.current === 0) {
-        fpsLastTickRef.current = now
-      }
-
-      fpsSamplesRef.current += 1
-      const elapsed = now - fpsLastTickRef.current
-
-      if (elapsed >= 1000) {
-        setFps(Math.round((fpsSamplesRef.current * 1000) / elapsed))
-        fpsSamplesRef.current = 0
-        fpsLastTickRef.current = now
-      }
-
-      fpsFrameRef.current = requestAnimationFrame(tick)
-    }
-
-    fpsFrameRef.current = requestAnimationFrame(tick)
-
-    return () => {
-      if (fpsFrameRef.current != null) {
-        cancelAnimationFrame(fpsFrameRef.current)
-        fpsFrameRef.current = null
-      }
-    }
-  }, [])
-
-  // Space key for pan
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const activeElement = document.activeElement
-      const isEditableTarget =
-        activeElement instanceof HTMLInputElement ||
-        activeElement instanceof HTMLTextAreaElement ||
-        (activeElement instanceof HTMLElement && activeElement.isContentEditable)
-
-      if (event.code === 'Space' && !isEditableTarget) {
-        event.preventDefault()
-        isSpacePressedRef.current = true
-      }
-    }
-
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.code === 'Space') {
-        isSpacePressedRef.current = false
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-    }
-  }, [])
-
-  // Stop drawing on pointer/mouse up
-  useEffect(() => {
-    const stopInteraction = () => {}
-
-    window.addEventListener('mouseup', stopInteraction)
-    window.addEventListener('pointerup', stopInteraction)
-
-    return () => {
-      window.removeEventListener('mouseup', stopInteraction)
-      window.removeEventListener('pointerup', stopInteraction)
-    }
-  }, [])
+  const [exportStatus, setExportStatus] = React.useState('Idle')
+  const [exportFiles, setExportFiles] = React.useState<string[]>([])
 
   const resetProject = (): void => {
     setNationName('Spawn 1')
@@ -130,7 +31,7 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
   }
 
   const handleExportMap = async (): Promise<void> => {
-    setExportStatus('Idle')
+    setExportStatus('Exporting…')
 
     try {
       const { project } = useEditorStore.getState()
@@ -172,11 +73,8 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
         <ControlsPanel onCreateBlankMap={handleCreateBlankMap} />
 
         <main className="canvas-shell">
-          <div className="canvas-frame" ref={frameRef}>
+          <div className="canvas-frame">
             <PixiCanvas />
-            <div className="fps-counter" aria-label="Frames per second">
-              FPS {fps}
-            </div>
           </div>
 
           <div className="footer-note">
