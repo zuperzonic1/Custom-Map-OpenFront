@@ -3,7 +3,7 @@ import { setRangeInput } from './editorHelpers.js'
 describe('OpenFront tool controls', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('shows all four tool buttons: Land, Water, Elevation and Nation', () => {

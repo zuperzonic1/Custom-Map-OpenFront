@@ -1,7 +1,7 @@
 describe('OpenFront map metadata', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('author and description are saved to localStorage and restored after reload', () => {

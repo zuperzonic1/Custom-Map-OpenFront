@@ -3,7 +3,7 @@ import { getCanvasColorAt, paintCanvasAt, setRangeInput } from './editorHelpers.
 describe('OpenFront elevation tool', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('Elevation tool paints a land tile with the specified magnitude colour', () => {

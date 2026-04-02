@@ -1,7 +1,7 @@
 describe('OpenFront nation placement', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('placed nations are saved to localStorage and restored after reload', () => {

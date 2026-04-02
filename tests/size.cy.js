@@ -1,7 +1,7 @@
 describe('OpenFront map size controls', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('New blank map button creates a map matching the entered dimensions', () => {
@@ -45,5 +45,38 @@ describe('OpenFront map size controls', () => {
     })
 
     cy.contains('.field', 'Zoom').find('strong').should('have.text', '1.00x')
+  })
+
+  it('creates a 1500×2000 map with correct dimensions and tile count', () => {
+    cy.contains('.status-card', 'Map size').within(() => {
+      cy.get('input[type="number"]').first().clear().type('1500')
+      cy.get('input[type="number"]').last().clear().type('2000')
+      cy.contains('New blank map').click()
+    })
+
+    cy.contains('dt', 'Width').parent().find('dd').should('have.text', '1500')
+    cy.contains('dt', 'Height').parent().find('dd').should('have.text', '2000')
+    cy.contains('dt', 'Tiles').parent().find('dd').should('have.text', '3000000')
+  })
+
+  it('can paint tiles on a 1500×2000 map without crashing', () => {
+    // Create the large map
+    cy.contains('.status-card', 'Map size').within(() => {
+      cy.get('input[type="number"]').first().clear().type('1500')
+      cy.get('input[type="number"]').last().clear().type('2000')
+      cy.contains('New blank map').click()
+    })
+
+    cy.contains('dt', 'Width').parent().find('dd').should('have.text', '1500')
+
+    // At zoom=1 and pan=0, tile (8,8) is at pixel (112,112). Click it with Land tool.
+    cy.contains('.button-group button', 'Land').click()
+    cy.get('canvas').then(($canvas) => {
+      cy.wrap($canvas[0]).click(112, 112, { force: true })
+    })
+
+    // The canvas should still be present and the FPS counter should still be running
+    cy.get('canvas').should('be.visible')
+    cy.get('[aria-label="Frames per second"]').should('exist')
   })
 })

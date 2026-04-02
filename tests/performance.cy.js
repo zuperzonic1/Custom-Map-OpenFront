@@ -10,7 +10,7 @@ import {
 describe('OpenFront viewport and performance', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('Space+drag pans the viewport so a tile that was land becomes water at the original cursor position', () => {

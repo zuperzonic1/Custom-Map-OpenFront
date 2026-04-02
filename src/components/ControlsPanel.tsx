@@ -163,22 +163,31 @@ function ZoomControl(): React.ReactElement {
   )
 }
 
+const MAX_PIXELS = 3_000_000
+
 function MapSizePanel({
   width,
   height,
   onCreateBlankMap,
-}: { 
-  width: number; 
-  height: number;
-  onCreateBlankMap: (w: number, h: number) => void;
+}: {
+  width: number
+  height: number
+  onCreateBlankMap: (w: number, h: number) => void
 }): React.ReactElement {
-  const widthInputRef = React.useRef<HTMLInputElement | null>(null)
-  const heightInputRef = React.useRef<HTMLInputElement | null>(null)
+  const [nextWidth, setNextWidth] = React.useState(width)
+  const [nextHeight, setNextHeight] = React.useState(height)
+
+  // Keep local state in sync when the project changes externally
+  React.useEffect(() => {
+    setNextWidth(width)
+    setNextHeight(height)
+  }, [width, height])
+
+  const totalPixels = nextWidth * nextHeight
+  const overLimit = totalPixels > MAX_PIXELS
 
   const handleCreateBlankMap = (): void => {
-    const nextWidth = Math.max(1, Math.floor(Number(widthInputRef.current?.value ?? width)))
-    const nextHeight = Math.max(1, Math.floor(Number(heightInputRef.current?.value ?? height)))
-
+    if (overLimit) return
     onCreateBlankMap(nextWidth, nextHeight)
   }
 
@@ -189,27 +198,35 @@ function MapSizePanel({
         <label className="field">
           <span>Width</span>
           <input
-            key={`width-${width}-${height}`}
-            ref={widthInputRef}
             type="number"
             min="1"
-            max="512"
-            defaultValue={width}
+            max="5000"
+            value={nextWidth}
+            onChange={(e) => setNextWidth(Math.max(1, Math.floor(Number(e.target.value))))}
           />
         </label>
         <label className="field">
           <span>Height</span>
           <input
-            key={`height-${width}-${height}`}
-            ref={heightInputRef}
             type="number"
             min="1"
-            max="512"
-            defaultValue={height}
+            max="5000"
+            value={nextHeight}
+            onChange={(e) => setNextHeight(Math.max(1, Math.floor(Number(e.target.value))))}
           />
         </label>
       </div>
-      <button type="button" className="secondary" onClick={handleCreateBlankMap}>
+      <div style={{ fontSize: '12px', color: overLimit ? '#f87171' : '#94a3b8', marginBottom: '8px' }}>
+        {totalPixels.toLocaleString()} / {MAX_PIXELS.toLocaleString()} px
+        {overLimit && ' — exceeds limit'}
+      </div>
+      <button
+        type="button"
+        className="secondary"
+        onClick={handleCreateBlankMap}
+        disabled={overLimit}
+        style={overLimit ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+      >
         New blank map
       </button>
     </div>

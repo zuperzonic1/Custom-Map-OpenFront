@@ -10,13 +10,12 @@ import {
 describe('OpenFront canvas editor', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('shows the page header, canvas and tools panel on load', () => {
     cy.contains('OpenFront map editor').should('be.visible')
-    cy.contains('Sprint 1 foundation').should('be.visible')
-    cy.contains('Sprint 2: editor depth').should('be.visible')
+    cy.contains('Map Editor').should('be.visible')
     cy.contains('Reset map').should('be.visible')
     cy.get('canvas').should('be.visible')
     cy.contains('Tools').should('be.visible')

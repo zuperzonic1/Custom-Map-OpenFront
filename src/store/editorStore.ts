@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { invalidateAllChunkCache, invalidateChunkCacheForRect } from '../lib/tileChunkCache'
 
 // Helper to serialize Uint8Array to base64 for efficient localStorage storage
 function typedArrayToBase64(arr: Uint8Array): string {
@@ -147,6 +148,36 @@ function createNationId() {
   return `nation-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
+/**
+ * A localStorage wrapper that silently swallows QuotaExceededError.
+ * Very large maps (e.g. 1500×2000 = 3 MB per array) produce ~8 MB of
+ * base64 data that exceeds the typical 5 MB localStorage budget.  Rather
+ * than crashing, we simply skip persistence for those saves.
+ */
+const safeLocalStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name)
+    } catch {
+      return null
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value)
+    } catch {
+      // QuotaExceededError — map is too large to persist; ignore silently.
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name)
+    } catch {
+      // Ignore.
+    }
+  },
+}
+
 export const useEditorStore = create<EditorStoreState>()(
   persist(
     immer((set, get) => ({
@@ -166,6 +197,7 @@ export const useEditorStore = create<EditorStoreState>()(
       projectStartPanY: 0,
       createBlankProject: (width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) =>
         set((state) => {
+          invalidateAllChunkCache()
           state.project = createBlankProject(width, height)
           state.panX = 0
           state.panY = 0
@@ -227,24 +259,28 @@ export const useEditorStore = create<EditorStoreState>()(
         set((state) => {
           state.isPanning = false
         }),
-      paintAt: (tileX, tileY) =>
+      paintAt: (tileX, tileY) => {
+        const { project, brushSize } = get()
+        const radius = Math.max(0, brushSize - 1)
+        // Invalidate chunk cache for the painted region before mutating state
+        invalidateChunkCacheForRect(
+          project,
+          tileX - radius,
+          tileY - radius,
+          tileX + radius,
+          tileY + radius,
+        )
         set((state) => {
-          const { project, brushSize, tool, elevationValue } = state
-          const radius = Math.max(0, brushSize - 1)
-          const terrain = project.terrain
-          const magnitude = project.magnitude
+          const { tool, elevationValue } = state
+          const { terrain, magnitude } = state.project
 
           for (let y = tileY - radius; y <= tileY + radius; y += 1) {
-            if (y < 0 || y >= project.height) {
-              continue
-            }
+            if (y < 0 || y >= state.project.height) continue
 
             for (let x = tileX - radius; x <= tileX + radius; x += 1) {
-              if (x < 0 || x >= project.width) {
-                continue
-              }
+              if (x < 0 || x >= state.project.width) continue
 
-              const index = y * project.width + x
+              const index = y * state.project.width + x
 
               if (tool === 'water') {
                 terrain[index] = 0
@@ -258,7 +294,8 @@ export const useEditorStore = create<EditorStoreState>()(
           }
 
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
+        })
+      },
       addNationAt: (tileX, tileY) =>
         set((state) => {
           const label = state.nationName.trim() || `Spawn ${state.project.nations.length + 1}`
@@ -289,7 +326,7 @@ export const useEditorStore = create<EditorStoreState>()(
     })),
     {
       name: 'openfront-editor-state',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (state) => ({
         project: serializeProject(state.project),
         tool: state.tool,

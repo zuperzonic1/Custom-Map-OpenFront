@@ -11,7 +11,7 @@ import {
 describe('OpenFront brush tool', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('paints a land tile at the clicked position with brush size 1', () => {

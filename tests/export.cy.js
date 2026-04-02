@@ -1,7 +1,7 @@
 describe('OpenFront ZIP export', () => {
   beforeEach(() => {
     cy.clearLocalStorage()
-    cy.visit('/')
+    cy.visit('/#/editor')
   })
 
   it('Export ZIP button downloads an archive containing all required map files', () => {
