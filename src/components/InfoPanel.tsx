@@ -2,6 +2,10 @@ import React, { useEffect, useRef } from 'react'
 import { useEditorStore } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
 
+function flagUrl(code: string): string {
+  return `https://flagcdn.com/w20/${code.toLowerCase()}.png`
+}
+
 export interface InfoPanelProps {
   onExportMap?: () => void
   onExportPng?: () => void
@@ -84,17 +88,27 @@ function NationsSection({
       ) : (
         <ul className="nations-list">
           {nations.map((nation) => (
-              <li key={nation.id} className="nation-row">
-                <div>
-                  <strong>
-                    {nation.name} [{nation.countryCode || 'US'}]
-                  </strong>
-                  <span>
-                    {nation.x}, {nation.y}
-                  </span>
+          <li key={nation.id} className="nation-row">
+                <div className="nation-row-info">
+                  <img
+                    className="nation-flag"
+                    src={flagUrl(nation.countryCode || 'us')}
+                    alt={nation.countryCode || 'US'}
+                    onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                    onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
+                  />
+                  <div>
+                    <strong>{nation.name}</strong>
+                    <span>{nation.x}, {nation.y}</span>
+                  </div>
                 </div>
-                <button type="button" className="secondary" onClick={() => removeNation(nation.id)}>
-                  Remove
+                <button
+                  type="button"
+                  className="nation-remove-btn"
+                  onClick={() => removeNation(nation.id)}
+                  aria-label="Remove nation"
+                >
+                  ×
                 </button>
               </li>
           ))}
@@ -315,7 +329,7 @@ function ExportSection({
   return (
     <div className="status-card">
       <h3>Export</h3>
-      <p>{exportStatus}</p>
+      {exportStatus !== 'Idle' && <p>{exportStatus}</p>}
       <div className="button-group">
         {onExportMap && (
           <button type="button" className="secondary" onClick={onExportMap}>

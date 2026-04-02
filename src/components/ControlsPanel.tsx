@@ -219,6 +219,7 @@ function ProjectInfoPanel({ width, height }: { width: number; height: number }):
   const projectNations = useEditorStore((state) => state.project.nations)
   const landTileCount = useEditorStore((state) => state.landTileCount)
   const atLimit = landTileCount >= MAX_LAND_TILES
+  const pct = Math.min(100, (landTileCount / MAX_LAND_TILES) * 100)
 
   return (
     <div className="status-card">
@@ -228,11 +229,21 @@ function ProjectInfoPanel({ width, height }: { width: number; height: number }):
           <dt>Total tiles</dt>
           <dd>{(width * height).toLocaleString()}</dd>
         </div>
-        <div>
+        <div className="land-tiles-row">
           <dt>Land tiles</dt>
-          <dd style={{ color: atLimit ? '#f87171' : undefined }}>
+          <div className="land-tiles-bar-track" aria-hidden="true">
+            <div
+              className="land-tiles-bar-fill"
+              style={{
+                width: `${pct}%`,
+                background: atLimit
+                  ? 'linear-gradient(90deg,#ef4444,#f87171)'
+                  : 'linear-gradient(90deg,var(--accent),var(--accent-2))',
+              }}
+            />
+          </div>
+          <dd className="land-tiles-count" style={{ color: atLimit ? '#f87171' : undefined }}>
             {landTileCount.toLocaleString()} / {MAX_LAND_TILES.toLocaleString()}
-            {atLimit && ' '}
           </dd>
         </div>
         <div>

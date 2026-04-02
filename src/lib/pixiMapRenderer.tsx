@@ -35,13 +35,15 @@ function createNationSprite(x: number, y: number, color: number, size: number): 
  * worldContainer local (world-pixel) space.  Children are expressed in
  * screen-pixel units; the caller must set container.scale.set(1/zoom) every
  * frame so the marker stays a constant physical size regardless of zoom.
+ *
+ * Renders an orange square + name label only. Flag images are rendered as
+ * HTML <img> elements in a separate overlay div to avoid WebGL CORS issues.
  */
 function createNationContainer(
   x: number,
   y: number,
   tileSize: number,
   name: string,
-  countryCode: string,
 ): Container {
   const container = new Container()
   container.label = `nation-${x}-${y}`
@@ -49,19 +51,23 @@ function createNationContainer(
   // Anchor in worldContainer space — zoom is applied by the parent.
   container.position.set(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2)
 
-  // Marker is drawn in screen-pixel space (scale-compensated each frame).
   const markerSize = 10
 
-  // Dark shadow
-  container.addChild(createNationSprite(-markerSize / 2 - 2, -markerSize / 2 - 2, 0x1e293b, markerSize + 4))
-  // Orange square
-  container.addChild(createNationSprite(-markerSize / 2, -markerSize / 2, 0xff9726, markerSize))
+  // Dark shadow behind the marker
+  container.addChild(
+    createNationSprite(-markerSize / 2 - 2, -markerSize / 2 - 2, 0x1e293b, markerSize + 4),
+  )
 
-  // Nation name label
+  // Orange square marker
+  container.addChild(
+    createNationSprite(-markerSize / 2, -markerSize / 2, 0xff9726, markerSize),
+  )
+
+  // Nation name label below the marker
   const label = new Text({
-    text: `${name} [${countryCode || 'US'}]`,
-      style: {
-        fontSize: 13,
+    text: name,
+    style: {
+      fontSize: 13,
       fill: 0xffffff,
       stroke: { color: 0x000000, width: 3 },
       fontWeight: 'bold',
@@ -310,7 +316,6 @@ export function usePixiMapRenderer(
             nation.y,
             baseTileSize,
             nation.name,
-            nation.countryCode || 'US',
           ),
         )
       })
@@ -371,10 +376,10 @@ export function usePixiMapRenderer(
       const entry = entries[0]
       if (!entry || !rendererRef.current) return
       const { width, height } = entry.contentRect
-        if (width > 0 && height > 0) {
-          rendererRef.current.resize(width, height)
-          useViewportStore.setState({ viewportWidth: width, viewportHeight: height })
-        }
+      if (width > 0 && height > 0) {
+        rendererRef.current.resize(width, height)
+        useViewportStore.setState({ viewportWidth: width, viewportHeight: height })
+      }
     })
 
     observer.observe(container)
@@ -388,6 +393,7 @@ export function usePixiMapRenderer(
 
 export function PixiMapEditor() {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const flagLayerRef = useRef<HTMLDivElement | null>(null)
 
   const isDrawingRef = useRef(false)
   const isSpacePressedRef = useRef(false)
@@ -398,6 +404,81 @@ export function PixiMapEditor() {
     height: 0,
     tileSize: BASE_TILE_SIZE,
   })
+
+  // ── HTML flag overlay — positions flag <img> elements over each nation ───────
+  // Uses direct DOM manipulation on each rAF tick (subscribed to both stores)
+  // so flags track pan/zoom with zero React re-renders.
+  useEffect(() => {
+    let rafId: number | null = null
+
+    const update = () => {
+      const layer = flagLayerRef.current
+      if (!layer) return
+
+      const { project } = useEditorStore.getState()
+      const { zoom, panX, panY } = useViewportStore.getState()
+      const tileSize = BASE_TILE_SIZE * zoom
+
+      // Build a map of existing img elements by nation id for O(1) lookup.
+      const existingMap = new Map<string, HTMLImageElement>()
+      for (const el of Array.from(layer.children) as HTMLImageElement[]) {
+        if (el.dataset.nationId) existingMap.set(el.dataset.nationId, el)
+      }
+
+      const seen = new Set<string>()
+
+      for (const nation of project.nations) {
+        const id = nation.id
+        seen.add(id)
+
+        // Centre of the tile in screen coordinates.
+        const screenX = Math.round(panX + (nation.x + 0.5) * tileSize)
+        const screenY = Math.round(panY + (nation.y + 0.5) * tileSize)
+
+        let el = existingMap.get(id)
+        if (!el) {
+          el = document.createElement('img')
+          el.dataset.nationId = id
+          el.style.cssText =
+            'position:absolute;pointer-events:none;border-radius:2px;' +
+            'border:1px solid rgba(255,255,255,0.4);width:26px;height:17px;' +
+            'object-fit:cover;transform:translate(-50%,-160%)'
+          layer.appendChild(el)
+        }
+
+        const newSrc = `https://flagcdn.com/w40/${(nation.countryCode || 'us').toLowerCase()}.png`
+        if (el.src !== newSrc) el.src = newSrc
+
+        el.style.left = `${screenX}px`
+        el.style.top = `${screenY}px`
+      }
+
+      // Remove stale flag elements for nations that no longer exist.
+      for (const [id, el] of existingMap) {
+        if (!seen.has(id)) el.remove()
+      }
+    }
+
+    const schedule = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        update()
+      })
+    }
+
+    const unsub1 = useEditorStore.subscribe(schedule)
+    const unsub2 = useViewportStore.subscribe(schedule)
+
+    // Run once immediately to position flags after mount.
+    schedule()
+
+    return () => {
+      unsub1()
+      unsub2()
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
+  }, [])
 
   // Key and global pointer-up listeners
   useEffect(() => {
@@ -509,9 +590,6 @@ export function PixiMapEditor() {
       const startX = event.clientX
       const startY = event.clientY
 
-      // Use only pointer events — mousemove/mouseup also fire for the same
-      // physical events on desktop, so registering both would double the rate.
-      // Plain-object setState to plain store — zero overhead (no Immer, no persist).
       const onMove = (moveEvent: PointerEvent) => {
         const dx = moveEvent.clientX - startX
         const dy = moveEvent.clientY - startY
@@ -583,6 +661,19 @@ export function PixiMapEditor() {
       onMouseLeave={handleMouseLeave}
     >
       {/* Pixi injects its <canvas> here after async init */}
+
+      {/* HTML flag overlay — flags are <img> elements positioned via DOM
+          manipulation to avoid WebGL CORS texture issues */}
+      <div
+        ref={flagLayerRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          overflow: 'hidden',
+        }}
+      />
+
       <div className="fps-counter" aria-label="Frames per second">
         FPS {fps}
       </div>

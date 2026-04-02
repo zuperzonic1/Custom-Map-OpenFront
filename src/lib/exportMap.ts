@@ -416,7 +416,7 @@ export async function buildExportBundle(project: MapProject): Promise<ExportBund
     // { coordinates: [x, y], flag, name }
     nations: project.nations.map((n) => ({
       name: n.name,
-      flag: n.countryCode,
+      flag: n.countryCode.toLowerCase(),
       coordinates: [n.x, n.y] as [number, number],
     })),
     metadata: project.metadata,

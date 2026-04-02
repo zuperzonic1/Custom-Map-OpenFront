@@ -215,7 +215,7 @@ button:active,
   gap: 10px;
 }
 
-.status-card dl div {
+.status-card dl div:not(.land-tiles-row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -227,7 +227,7 @@ button:active,
   margin: 0;
 }
 
-.status-card ul {
+.status-card ul:not(.nations-list) {
   margin: 0;
   padding-left: 18px;
   display: grid;
@@ -330,7 +330,7 @@ button:active,
   background: rgba(2, 6, 23, 0.35);
 }
 
-.nation-row div {
+.nation-row > div:not(.nation-row-info) {
   display: grid;
   gap: 2px;
 }
@@ -370,6 +370,7 @@ button:active,
 }
 
 .nation-modal {
+  position: relative;
   width: min(520px, 100%);
   padding: 24px;
   border: 1px solid var(--line);
@@ -378,10 +379,33 @@ button:active,
   box-shadow: var(--shadow);
 }
 
+.nation-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  color: #94a3b8;
+  background: transparent;
+}
+
+.nation-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-strong);
+}
+
 .nation-modal h2 {
   margin: 0 0 8px;
   color: var(--text-strong);
   font-size: 22px;
+  padding-right: 40px;
 }
 
 .nation-modal p {
@@ -394,6 +418,119 @@ button:active,
   display: grid;
   gap: 14px;
   margin-bottom: 20px;
+}
+
+.nation-name-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.nation-name-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.name-random-btn {
+  flex-shrink: 0;
+  font-size: 18px;
+  padding: 8px 12px !important;
+  line-height: 1;
+}
+
+.flag-select-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.flag-select-row select {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text-strong);
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.flag-preview {
+  width: 48px;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  object-fit: cover;
+  visibility: hidden;
+}
+
+.nation-row-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nation-row-info > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nation-flag {
+  width: 24px;
+  height: auto;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+  object-fit: cover;
+  visibility: hidden;
+}
+
+.land-tiles-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.land-tiles-bar-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  overflow: hidden;
+}
+
+.land-tiles-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 150ms ease;
+}
+
+.land-tiles-count {
+  font-size: 11px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.nation-remove-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.nation-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
 }
 
 .nation-modal-actions {
