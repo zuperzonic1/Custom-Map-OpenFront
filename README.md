@@ -1,75 +1,163 @@
-# React + TypeScript + Vite
+# Custom Map Editor - OpenFront
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A client-side web application for creating and editing custom maps for OpenFront. This tool provides an intuitive visual interface for designing terrain, water bodies, and nation spawn points without requiring any server infrastructure.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Visual Map Editor**: Paint land, water, and nation spawn points with an interactive brush tool
+- **Image Import**: Import existing images as map templates (supports any size)
+- **Elevation Control**: Set custom elevation levels for land tiles
+- **Nation Management**: Define multiple nations with custom names and spawn locations
+- **Real-time Preview**: See changes instantly with minimap visualization
+- **Export Functionality**: Export maps in OpenFront-compatible format
+- **Client-Side Only**: No server required - runs entirely in your browser
+- **Performance Optimized**: Handles large maps with smooth painting, zooming, and panning
 
-## React Compiler
+## Credits
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+This project uses the map generation format from the [OpenFront Map Generator](https://github.com/openfrontio/OpenFrontIO/tree/main/map-generator).
 
-Note: This will impact Vite dev & build performances.
+## Getting Started
 
-## Expanding the ESLint configuration
+### Prerequisites
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Node.js (v18 or higher)
+- npm or yarn package manager
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Installation
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Clone the repository:
+```bash
+git clone https://github.com/zuperzonic1/Custom-Map-OpenFront.git
+cd Custom-Map-OpenFront
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2. Install dependencies:
+```bash
+npm install
 ```
+
+### Running the Application
+
+#### Development Mode
+```bash
+npm run dev
+```
+The application will start on `http://localhost:5173` (or another port if 5173 is in use).
+
+#### Production Build
+```bash
+npm run build
+```
+This creates an optimized production build in the `dist/` directory.
+
+#### Preview Production Build
+```bash
+npm run preview
+```
+
+### Running Tests
+```bash
+npm run test
+```
+
+## Project Structure
+
+```
+Custom-Map-OpenFront/
+├── cypress/                    # End-to-end test files and configuration
+│   ├── downloads/             # Test download outputs
+│   └── screenshots/           # Test screenshots
+├── dist/                      # Production build output (generated)
+├── public/                    # Static assets
+│   ├── favicon.svg           # Application icon
+│   └── icons.svg             # SVG icon definitions
+├── scripts/                   # Utility scripts for data cleaning
+│   ├── cleanChars.cjs        # Character cleaning utilities
+│   ├── cleanFile.cjs         # File cleaning script
+│   └── inspectBytes.*        # Byte inspection tools
+├── src/                       # Source code
+│   ├── assets/               # Application assets (images, fonts, etc.)
+│   ├── components/           # React components
+│   │   ├── ControlsPanel.tsx # Tool controls and settings panel
+│   │   └── InfoPanel.tsx     # Map information and minimap display
+│   ├── lib/                  # Core library functions
+│   │   ├── exportMap.ts      # Map export functionality
+│   │   ├── importMap.ts      # Image import and processing
+│   │   ├── mapTexture.ts     # Texture generation for map rendering
+│   │   └── pixiMapRenderer.tsx # PixiJS-based map renderer
+│   ├── pages/                # Page components
+│   │   ├── EditorPage.tsx    # Main editor interface
+│   │   ├── LandingPage.tsx   # Welcome/landing page
+│   │   └── *.css             # Page-specific styles
+│   ├── store/                # State management (Zustand)
+│   │   ├── editorStore.ts    # Main editor state (project, tools, terrain)
+│   │   └── viewportStore.ts  # Viewport state (zoom, pan - performance optimized)
+│   ├── App.tsx               # Root application component
+│   ├── App.css               # Global application styles
+│   ├── index.css             # Base styles and CSS variables
+│   └── main.tsx              # Application entry point
+├── tests/                     # Cypress E2E tests
+│   ├── brush.cy.js           # Brush tool tests
+│   ├── editor.cy.js          # Editor functionality tests
+│   ├── elevation.cy.js       # Elevation control tests
+│   ├── export.cy.js          # Export functionality tests
+│   ├── metadata.cy.js        # Metadata handling tests
+│   ├── nations.cy.js         # Nation management tests
+│   ├── performance.cy.js     # Performance benchmarks
+│   ├── size.cy.js            # Map size tests
+│   └── tools.cy.js           # Tool switching tests
+├── .gitignore                # Git ignore rules
+├── cypress.config.js         # Cypress test configuration
+├── eslint.config.js          # ESLint configuration
+├── index.html                # HTML entry point
+├── package.json              # Project dependencies and scripts
+├── README.md                 # This file
+├── TECHNICAL_SPEC.md         # Technical specification and architecture
+├── tsconfig.json             # TypeScript configuration (base)
+├── tsconfig.app.json         # TypeScript configuration (app)
+├── tsconfig.node.json        # TypeScript configuration (Node.js)
+└── vite.config.ts            # Vite build configuration
+```
+
+## Key Files Explained
+
+- **`src/store/editorStore.ts`**: Main application state including map project data, tool selection, and terrain information. Uses Zustand with Immer middleware for immutable updates and persist middleware for localStorage.
+
+- **`src/store/viewportStore.ts`**: Separate high-performance store for viewport state (zoom, pan). Split from editorStore to avoid serialization overhead during frequent viewport updates.
+
+- **`src/lib/pixiMapRenderer.tsx`**: Core rendering engine using PixiJS for hardware-accelerated canvas rendering. Handles all map visualization, panning, zooming, and brush interactions.
+
+- **`src/lib/exportMap.ts`**: Exports maps in OpenFront-compatible binary format with terrain data, nation spawn points, and metadata.
+
+- **`src/lib/importMap.ts`**: Processes uploaded images and converts them to map terrain data.
+
+- **`src/components/ControlsPanel.tsx`**: UI controls for tool selection, brush size, elevation, nation names, zoom control, and map size configuration.
+
+- **`src/components/InfoPanel.tsx`**: Displays project statistics and a minimap overview with real-time viewport indicator.
+
+## Technology Stack
+
+- **React** - UI framework
+- **TypeScript** - Type-safe development
+- **Vite** - Build tool and dev server
+- **PixiJS** - Hardware-accelerated 2D rendering
+- **Zustand** - Lightweight state management
+- **Immer** - Immutable state updates
+- **Cypress** - End-to-end testing
+
+## Architecture Notes
+
+The application uses a split-store architecture for optimal performance:
+- `editorStore`: Handles project data with deferred persistence to avoid blocking the main thread
+- `viewportStore`: Plain store without middleware for zero-overhead viewport updates during pan/zoom operations
+
+This architecture enables smooth performance even with large maps (5000x5000+ pixels).
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
