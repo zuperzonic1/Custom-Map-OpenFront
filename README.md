@@ -1,5 +1,7 @@
 # Custom Map Editor - OpenFront
 
+**🌐 Live Demo: [https://ofmapeditor.projectsmith.dev/](https://ofmapeditor.projectsmith.dev/)**
+
 A client-side web application for creating and editing custom maps for OpenFront. This tool provides an intuitive visual interface for designing terrain, water bodies, and nation spawn points without requiring any server infrastructure.
 
 ## Features
