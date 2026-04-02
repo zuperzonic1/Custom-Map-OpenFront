@@ -74,6 +74,39 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
         </div>
       </section>
 
+      <section className="landing-guide">
+        <h2>Enabling Maps In-Game</h2>
+        <p>
+          After generating map files, enable the map in-game. See the{' '}
+          <a
+            href="https://openfrontio-openfrontio.mintlify.app/map-generator/usage"
+            target="_blank"
+            rel="noreferrer"
+          >
+            original usage docs
+          </a>{' '}
+          for the full guide.
+        </p>
+        <ol>
+          <li>
+            <strong>Update Game Types</strong>
+            <span>Add to <code>GameMapType</code> and <code>mapCategories</code> in <code>src/core/game/Game.ts</code></span>
+          </li>
+          <li>
+            <strong>Update Map Playlist</strong>
+            <span>Add to <code>src/server/MapPlaylist.ts</code></span>
+          </li>
+          <li>
+            <strong>Add Translation</strong>
+            <span>Add to the map object in <code>resources/lang/en.json</code></span>
+          </li>
+          <li>
+            <strong>Update Credits</strong>
+            <span>Add license and attribution to <code>CREDITS.md</code></span>
+          </li>
+        </ol>
+      </section>
+
       {/* ── features grid ──────────────────────── */}
       <section className="landing-features">
         <h2>Everything you need</h2>
@@ -89,7 +122,23 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
       </section>
 
       <footer className="landing-footer">
-        OpenFront Map Editor — open source, runs entirely in your browser.
+        <p>OpenFront Map Editor — open source, runs entirely in your browser.</p>
+        <p>
+          Current repository:{' '}
+          <a href="https://github.com/zuperzonic1/Custom-Map-OpenFront" target="_blank" rel="noreferrer">
+            zuperzonic1/Custom-Map-OpenFront
+          </a>
+        </p>
+        <p>
+          Map generator credits:{' '}
+          <a
+            href="https://github.com/openfrontio/OpenFrontIO/tree/main/map-generator"
+            target="_blank"
+            rel="noreferrer"
+          >
+            OpenFrontIO map-generator
+          </a>
+        </p>
       </footer>
     </div>
   )

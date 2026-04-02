@@ -49,7 +49,79 @@
   line-height: 1.6;
 }
 
-/* ── features grid ─────────────────────────── */
+/* ── guide section ─────────────────────────── */
+.landing-guide {
+  width: 100%;
+  max-width: 860px;
+  padding: 28px 32px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.76);
+  box-shadow: var(--shadow);
+}
+
+.landing-guide h2 {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.landing-guide > p {
+  margin: 0 0 20px;
+  text-align: center;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+.landing-guide > p a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.landing-guide > p a:hover {
+  text-decoration: underline;
+}
+
+.landing-guide ol {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.landing-guide li {
+  padding-left: 8px;
+}
+
+.landing-guide strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-strong);
+}
+
+.landing-guide span {
+  display: block;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.landing-guide code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.6);
+  color: var(--text-strong);
+  font-size: 0.95em;
+}
+
+@media (max-width: 600px) {
+  .landing-guide {
+    padding: 22px 18px;
+  }
+}
+
 .landing-features {
   width: 100%;
   max-width: 860px;
@@ -328,7 +400,24 @@
 
 /* ── footer ────────────────────────────────── */
 .landing-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
   font-size: 13px;
   color: #475569;
   text-align: center;
+}
+
+.landing-footer p {
+  margin: 0;
+}
+
+.landing-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.landing-footer a:hover {
+  text-decoration: underline;
 }
