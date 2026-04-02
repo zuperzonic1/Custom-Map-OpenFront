@@ -24,7 +24,7 @@ export function InfoPanel({
       <NationsSection nations={projectNations} />
 
       <div className="status-card minimap-card">
-        <Minimap width={projectWidth} height={projectHeight} nations={projectNations} />
+        <Minimap width={projectWidth} height={projectHeight} />
       </div>
 
       <ExportSection
@@ -106,152 +106,181 @@ const WATER_B = 0x6c
 /** Must stay in sync with BASE_TILE_SIZE in pixiMapRenderer.tsx */
 const TILE_SIZE = 14
 
+type MinimapMetrics = { offsetX: number; offsetY: number; renderW: number; renderH: number; scale: number }
+
 function Minimap({
   width,
   height,
-  nations,
 }: {
   width: number
   height: number
-  nations: Array<{ id: string; name: string; x: number; y: number }>
 }): React.ReactElement {
   const minimapFrameRef = React.useRef<HTMLDivElement | null>(null)
   const minimapRef = useRef<HTMLCanvasElement | null>(null)
 
-  // Cached terrain pixel data — rebuilt only when project content changes.
+  // Stable metrics shared between the sizing code and the draw callback.
+  const metricsRef = useRef<MinimapMetrics>({ offsetX: 0, offsetY: 0, renderW: 1, renderH: 1, scale: 1 })
+
+  // Cached terrain ImageData — rebuilt only when renderRevision changes.
   const terrainImageDataRef = useRef<ImageData | null>(null)
-  const terrainCacheRevisionRef = useRef<number>(-1)
+  const terrainRevisionRef = useRef<number>(-1)
 
-  const renderRevision = useEditorStore((state) => state.renderRevision)
-  const zoom = useEditorStore((state) => state.zoom)
-  const panX = useEditorStore((state) => state.panX)
-  const panY = useEditorStore((state) => state.panY)
-  const viewportWidth = useEditorStore((state) => state.viewportWidth)
-  const viewportHeight = useEditorStore((state) => state.viewportHeight)
-
+  // All drawing runs inside a Zustand subscription + rAF loop — no React
+  // re-renders on pan / zoom / paint.
   useEffect(() => {
     const canvas = minimapRef.current
-    if (!canvas) return
-
     const frame = minimapFrameRef.current
-    if (!frame) return
+    if (!canvas || !frame) return
 
-    const { width: mapWidth, height: mapHeight } = frame.getBoundingClientRect()
-    if (mapWidth === 0 || mapHeight === 0) return
+    let rafId: number | null = null
 
-    // Set canvas size based on container with DPR scaling
-    const dpr = window.devicePixelRatio || 1
-    const canvasW = Math.floor(mapWidth * dpr)
-    const canvasH = Math.floor(mapHeight * dpr)
+    const draw = () => {
+      const ctx = canvas.getContext('2d')
+      if (!ctx || canvas.width === 0) return
 
-    // Only resize the backing store if dimensions actually changed
-    if (canvas.width !== canvasW || canvas.height !== canvasH) {
-      canvas.width = canvasW
-      canvas.height = canvasH
-      canvas.style.width = `${mapWidth}px`
-      canvas.style.height = `${mapHeight}px`
-      // Force terrain ImageData rebuild on resize (dimensions changed)
-      terrainCacheRevisionRef.current = -1
-    }
+      const state = useEditorStore.getState()
+      const { offsetX, offsetY, renderW, renderH, scale } = metricsRef.current
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // Scale coordinates → account for DPR
-    const scale = Math.min((mapWidth * dpr) / width, (mapHeight * dpr) / height)
-    const mapRenderWidth = width * scale
-    const mapRenderHeight = height * scale
-    const offsetX = Math.floor(((mapWidth * dpr) - mapRenderWidth) / 2)
-    const offsetY = Math.floor(((mapHeight * dpr) - mapRenderHeight) / 2)
-
-    const renderW = Math.max(1, Math.round(mapRenderWidth))
-    const renderH = Math.max(1, Math.round(mapRenderHeight))
-
-    // Rebuild terrain ImageData only when project content changed or canvas resized.
-    if (renderRevision !== terrainCacheRevisionRef.current) {
-      const { project } = useEditorStore.getState()
-      const imageData = ctx.createImageData(renderW, renderH)
-      const data = imageData.data
-
-      for (let py = 0; py < renderH; py += 1) {
-        const tileY = Math.floor((py / renderH) * height)
-        const rowBase = tileY * width
-        for (let px = 0; px < renderW; px += 1) {
-          const tileX = Math.floor((px / renderW) * width)
-          const srcIdx = rowBase + tileX
-          const t = project.terrain[srcIdx] ?? 0
-          const m = project.magnitude[srcIdx] ?? 0
-          const dstIdx = (py * renderW + px) * 4
-          if (t === 1) {
-            data[dstIdx]     = m
-            data[dstIdx + 1] = m + 30 > 255 ? 255 : m + 30
-            data[dstIdx + 2] = m + 10 > 255 ? 255 : m + 10
-            data[dstIdx + 3] = 255
-          } else {
-            data[dstIdx]     = WATER_R
-            data[dstIdx + 1] = WATER_G
-            data[dstIdx + 2] = WATER_B
-            data[dstIdx + 3] = 255
+      // Rebuild terrain ImageData only when project content changed.
+      if (state.renderRevision !== terrainRevisionRef.current) {
+        const { project } = state
+        const imageData = ctx.createImageData(renderW, renderH)
+        const data = imageData.data
+        for (let py = 0; py < renderH; py++) {
+          const tileY = Math.floor((py / renderH) * height)
+          const rowBase = tileY * width
+          for (let px = 0; px < renderW; px++) {
+            const tileX = Math.floor((px / renderW) * width)
+            const srcIdx = rowBase + tileX
+            const t = project.terrain[srcIdx] ?? 0
+            const m = project.magnitude[srcIdx] ?? 0
+            const dstIdx = (py * renderW + px) * 4
+            if (t === 1) {
+              data[dstIdx]     = m
+              data[dstIdx + 1] = m + 30 > 255 ? 255 : m + 30
+              data[dstIdx + 2] = m + 10 > 255 ? 255 : m + 10
+              data[dstIdx + 3] = 255
+            } else {
+              data[dstIdx]     = WATER_R
+              data[dstIdx + 1] = WATER_G
+              data[dstIdx + 2] = WATER_B
+              data[dstIdx + 3] = 255
+            }
           }
         }
+        terrainImageDataRef.current = imageData
+        terrainRevisionRef.current = state.renderRevision
       }
 
-      terrainImageDataRef.current = imageData
-      terrainCacheRevisionRef.current = renderRevision
+      // Composite: background → terrain → border → nations → viewport rect.
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.fillStyle = '#020617'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      if (terrainImageDataRef.current) {
+        ctx.putImageData(terrainImageDataRef.current, offsetX, offsetY)
+      }
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(offsetX, offsetY, renderW, renderH)
+
+      state.project.nations.forEach((nation) => {
+        ctx.beginPath()
+        ctx.fillStyle = '#f97316'
+        ctx.arc(
+          offsetX + ((nation.x + 0.5) / width) * renderW,
+          offsetY + ((nation.y + 0.5) / height) * renderH,
+          Math.max(2, scale * 0.25),
+          0,
+          Math.PI * 2,
+        )
+        ctx.fill()
+      })
+
+      // Viewport indicator — white rect tracking the visible area.
+      // Fully zoomed out → rect equals minimap bounds → white border.
+      const { zoom, panX, panY, viewportWidth, viewportHeight } = state
+      const tileLeft  = -panX / (TILE_SIZE * zoom)
+      const tileTop   = -panY / (TILE_SIZE * zoom)
+      const tilesWide = viewportWidth  / (TILE_SIZE * zoom)
+      const tilesHigh = viewportHeight / (TILE_SIZE * zoom)
+
+      const vx1 = offsetX + (tileLeft / width) * renderW
+      const vy1 = offsetY + (tileTop  / height) * renderH
+      const vx2 = offsetX + ((tileLeft + tilesWide) / width) * renderW
+      const vy2 = offsetY + ((tileTop  + tilesHigh) / height) * renderH
+
+      const cx1 = Math.max(offsetX, vx1)
+      const cy1 = Math.max(offsetY, vy1)
+      const cx2 = Math.min(offsetX + renderW, vx2)
+      const cy2 = Math.min(offsetY + renderH, vy2)
+
+      if (cx2 > cx1 && cy2 > cy1) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+        ctx.lineWidth = 1.5
+        ctx.strokeRect(cx1 + 0.5, cy1 + 0.5, cx2 - cx1 - 1, cy2 - cy1 - 1)
+      }
     }
 
-    // Composite: clear → terrain → border → nations → viewport indicator.
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#020617'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    /** Size the canvas to the frame, recompute metrics, then draw. */
+    const sizeAndDraw = () => {
+      const { width: fw, height: fh } = frame.getBoundingClientRect()
+      if (fw === 0 || fh === 0) return
 
-    if (terrainImageDataRef.current) {
-      ctx.putImageData(terrainImageDataRef.current, offsetX, offsetY)
+      const dpr = window.devicePixelRatio || 1
+      const cw = Math.floor(fw * dpr)
+      const ch = Math.floor(fh * dpr)
+
+      // Always recompute metrics so that tile-dimension changes (new map size)
+      // are reflected even when the container pixel size hasn't changed.
+      const s = Math.min((fw * dpr) / width, (fh * dpr) / height)
+      const rW = Math.max(1, Math.round(width * s))
+      const rH = Math.max(1, Math.round(height * s))
+      const ox = Math.floor(((fw * dpr) - rW) / 2)
+      const oy = Math.floor(((fh * dpr) - rH) / 2)
+
+      const prev = metricsRef.current
+      const metricsChanged =
+        canvas.width !== cw ||
+        canvas.height !== ch ||
+        prev.renderW !== rW ||
+        prev.renderH !== rH ||
+        prev.offsetX !== ox ||
+        prev.offsetY !== oy
+
+      if (metricsChanged) {
+        canvas.width = cw
+        canvas.height = ch
+        canvas.style.width = `${fw}px`
+        canvas.style.height = `${fh}px`
+        metricsRef.current = { offsetX: ox, offsetY: oy, renderW: rW, renderH: rH, scale: s }
+        // Metrics changed — force full terrain ImageData rebuild.
+        terrainRevisionRef.current = -1
+      }
+
+      draw()
     }
 
-    // Map border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'
-    ctx.lineWidth = 1
-    ctx.strokeRect(offsetX, offsetY, renderW, renderH)
-
-    // Nation markers
-    nations.forEach((nation) => {
-      ctx.beginPath()
-      ctx.fillStyle = '#f97316'
-      ctx.arc(
-        offsetX + ((nation.x + 0.5) / width) * renderW,
-        offsetY + ((nation.y + 0.5) / height) * renderH,
-        Math.max(2, scale * 0.25),
-        0,
-        Math.PI * 2,
-      )
-      ctx.fill()
-    })
-
-    // Viewport indicator — white rect showing the currently visible area.
-    // When fully zoomed out the rect equals the minimap bounds → white border.
-    const tileLeft = -panX / (TILE_SIZE * zoom)
-    const tileTop  = -panY / (TILE_SIZE * zoom)
-    const tilesWide = viewportWidth  / (TILE_SIZE * zoom)
-    const tilesHigh = viewportHeight / (TILE_SIZE * zoom)
-
-    const vx1 = offsetX + (tileLeft / width) * renderW
-    const vy1 = offsetY + (tileTop  / height) * renderH
-    const vx2 = offsetX + ((tileLeft + tilesWide) / width) * renderW
-    const vy2 = offsetY + ((tileTop  + tilesHigh) / height) * renderH
-
-    // Clamp to minimap bounds
-    const cx1 = Math.max(offsetX, vx1)
-    const cy1 = Math.max(offsetY, vy1)
-    const cx2 = Math.min(offsetX + renderW, vx2)
-    const cy2 = Math.min(offsetY + renderH, vy2)
-
-    if (cx2 > cx1 && cy2 > cy1) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
-      ctx.lineWidth = 1.5
-      ctx.strokeRect(cx1 + 0.5, cy1 + 0.5, cx2 - cx1 - 1, cy2 - cy1 - 1)
+    /** Schedule at most one draw per animation frame. */
+    const schedule = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => { rafId = null; sizeAndDraw() })
     }
-  }, [width, height, nations, renderRevision, zoom, panX, panY, viewportWidth, viewportHeight])
+
+    // Subscribe to ALL store changes — the rAF guard ensures at most one
+    // canvas composite per frame regardless of how many state mutations occur.
+    const unsubscribe = useEditorStore.subscribe(schedule)
+    schedule() // draw immediately on mount / map-dimension change
+
+    return () => {
+      unsubscribe()
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+    }
+  }, [width, height]) // re-run only when the map tile dimensions change
 
   return (
     <div

@@ -1,5 +1,5 @@
 import React from 'react'
-import { useEditorStore } from '../store/editorStore'
+import { useEditorStore, MAX_LAND_TILES } from '../store/editorStore'
 
 export interface ControlsPanelProps {
   onResetMap?: () => void
@@ -23,15 +23,15 @@ export function ControlsPanel({
       <ElevationControl />
       <NationNameControl />
       <ZoomControl />
-      
-      <MapSizePanel 
-        width={projectWidth} 
-        height={projectHeight} 
+
+      <MapSizePanel
+        width={projectWidth}
+        height={projectHeight}
         onCreateBlankMap={onCreateBlankMap}
       />
-      
-      <ProjectInfoPanel 
-        width={projectWidth} 
+
+      <ProjectInfoPanel
+        width={projectWidth}
         height={projectHeight}
       />
 
@@ -54,7 +54,6 @@ function ToolButtons(): React.ReactElement {
     <div className="button-group tool-grid">
       <ToolButton label="Land" active={tool === 'land'} onClick={() => setTool('land')} />
       <ToolButton label="Water" active={tool === 'water'} onClick={() => setTool('water')} />
-      <ToolButton label="Elevation" active={tool === 'elevation'} onClick={() => setTool('elevation')} />
       <ToolButton label="Nation" active={tool === 'nation'} onClick={() => setTool('nation')} />
     </div>
   )
@@ -90,7 +89,8 @@ function BrushSizeControl(): React.ReactElement {
       <input
         type="range"
         min="1"
-        max="10"
+        max="50"
+        step="1"
         value={brushSize}
         onInput={(event) => setBrushSize(Number(event.currentTarget.value))}
         onChange={(event) => setBrushSize(Number(event.currentTarget.value))}
@@ -106,7 +106,7 @@ function ElevationControl(): React.ReactElement {
 
   return (
     <label className="field">
-      <span>Elevation</span>
+      <span>Land elevation</span>
       <input
         type="range"
         min="0"
@@ -141,7 +141,6 @@ function ZoomControl(): React.ReactElement {
   const setZoom = useEditorStore((state) => state.setZoom)
 
   const handleZoomSliderChange = (value: number): void => {
-    // Clamp the value between MIN_ZOOM and MAX_ZOOM
     const clamped = Math.max(0.05, Math.min(6, value))
     setZoom(clamped)
   }
@@ -163,8 +162,6 @@ function ZoomControl(): React.ReactElement {
   )
 }
 
-const MAX_PIXELS = 3_000_000
-
 function MapSizePanel({
   width,
   height,
@@ -182,14 +179,6 @@ function MapSizePanel({
     setNextWidth(width)
     setNextHeight(height)
   }, [width, height])
-
-  const totalPixels = nextWidth * nextHeight
-  const overLimit = totalPixels > MAX_PIXELS
-
-  const handleCreateBlankMap = (): void => {
-    if (overLimit) return
-    onCreateBlankMap(nextWidth, nextHeight)
-  }
 
   return (
     <div className="status-card">
@@ -216,16 +205,10 @@ function MapSizePanel({
           />
         </label>
       </div>
-      <div style={{ fontSize: '12px', color: overLimit ? '#f87171' : '#94a3b8', marginBottom: '8px' }}>
-        {totalPixels.toLocaleString()} / {MAX_PIXELS.toLocaleString()} px
-        {overLimit && ' — exceeds limit'}
-      </div>
       <button
         type="button"
         className="secondary"
-        onClick={handleCreateBlankMap}
-        disabled={overLimit}
-        style={overLimit ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+        onClick={() => onCreateBlankMap(nextWidth, nextHeight)}
       >
         New blank map
       </button>
@@ -235,22 +218,23 @@ function MapSizePanel({
 
 function ProjectInfoPanel({ width, height }: { width: number; height: number }): React.ReactElement {
   const projectNations = useEditorStore((state) => state.project.nations)
+  const landTileCount = useEditorStore((state) => state.landTileCount)
+  const atLimit = landTileCount >= MAX_LAND_TILES
 
   return (
     <div className="status-card">
       <h3>Project</h3>
       <dl>
         <div>
-          <dt>Width</dt>
-          <dd>{width}</dd>
+          <dt>Total tiles</dt>
+          <dd>{(width * height).toLocaleString()}</dd>
         </div>
         <div>
-          <dt>Height</dt>
-          <dd>{height}</dd>
-        </div>
-        <div>
-          <dt>Tiles</dt>
-          <dd>{width * height}</dd>
+          <dt>Land tiles</dt>
+          <dd style={{ color: atLimit ? '#f87171' : undefined }}>
+            {landTileCount.toLocaleString()} / {MAX_LAND_TILES.toLocaleString()}
+            {atLimit && ' \u26a0'}
+          </dd>
         </div>
         <div>
           <dt>Nations</dt>

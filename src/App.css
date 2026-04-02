@@ -156,7 +156,7 @@ button:active,
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(2, 6, 23, 0.28);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .size-grid {
@@ -285,6 +285,9 @@ button:active,
   padding: 0;
   display: grid;
   gap: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .export-list {

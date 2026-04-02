@@ -1,8 +1,7 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import './LandingPage.css'
 import { useEditorStore } from '../store/editorStore'
-
-const MAX_PIXELS = 3_000_000
+import { importImageAsProject, ImportError } from '../lib/importMap'
 
 const FEATURES = [
   {
@@ -13,7 +12,7 @@ const FEATURES = [
   {
     icon: '⛰️',
     title: 'Elevation Control',
-    description: 'Set per-tile elevation/intensity values for rich terrain variation.',
+    description: 'Set per-tile elevation values for rich terrain variation.',
   },
   {
     icon: '🏳️',
@@ -28,7 +27,7 @@ const FEATURES = [
   {
     icon: '📦',
     title: 'OpenFront Export',
-    description: 'Export a ready-to-use .zip with image.png and info.json.',
+    description: 'Export a ready-to-use .zip with binary map data and manifest.',
   },
   {
     icon: '💾',
@@ -38,24 +37,10 @@ const FEATURES = [
 ] as const
 
 interface LandingPageProps {
-  onEnterEditor: (width: number, height: number) => void
+  onEnterEditor: () => void
 }
 
 export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactElement {
-  const [width, setWidth] = useState(1000)
-  const [height, setHeight] = useState(1000)
-
-  const totalPixels = width * height
-  const overLimit = totalPixels > MAX_PIXELS
-  const fillPct = Math.min((totalPixels / MAX_PIXELS) * 100, 100)
-  const fillClass = overLimit ? 'over' : fillPct >= 75 ? 'warn' : 'ok'
-
-  const handleLaunch = (): void => {
-    if (overLimit) return
-    useEditorStore.getState().createBlankProject(width, height)
-    onEnterEditor(width, height)
-  }
-
   return (
     <div className="landing">
       {/* ── hero ───────────────────────────────── */}
@@ -68,6 +53,20 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
           A fully browser-based editor for creating custom OpenFront maps. Paint terrain, set
           elevations, place nation spawns and export a game-ready zip — no installs required.
         </p>
+      </section>
+
+      {/* ── configurator (moved above features) ── */}
+      <section className="landing-configurator">
+        <div className="configurator-card">
+          <h2>Get started</h2>
+          <div className="configurator-split">
+            <NewMapPanel onEnterEditor={onEnterEditor} />
+            <div className="configurator-divider">
+              <span>or</span>
+            </div>
+            <ImportMapPanel onEnterEditor={onEnterEditor} />
+          </div>
+        </div>
       </section>
 
       {/* ── features grid ──────────────────────── */}
@@ -84,75 +83,121 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
         </div>
       </section>
 
-      {/* ── configurator ───────────────────────── */}
-      <section className="landing-configurator">
-        <div className="configurator-card">
-          <h2>
-            Create your map
-            <span>Choose a size, then open the editor.</span>
-          </h2>
-
-          <div className="size-inputs">
-            <label className="field">
-              <span>Width (tiles)</span>
-              <input
-                type="number"
-                min={1}
-                max={5000}
-                value={width}
-                onChange={(e) => setWidth(Math.max(1, Math.floor(Number(e.target.value))))}
-                data-testid="landing-width"
-              />
-            </label>
-            <label className="field">
-              <span>Height (tiles)</span>
-              <input
-                type="number"
-                min={1}
-                max={5000}
-                value={height}
-                onChange={(e) => setHeight(Math.max(1, Math.floor(Number(e.target.value))))}
-                data-testid="landing-height"
-              />
-            </label>
-          </div>
-
-          <div className="pixel-budget">
-            <div className="pixel-budget-label">
-              <span>Pixel budget</span>
-              <strong className={overLimit ? 'over-limit' : ''}>
-                {totalPixels.toLocaleString()} / {MAX_PIXELS.toLocaleString()}
-              </strong>
-            </div>
-            <div className="pixel-budget-bar">
-              <div
-                className={`pixel-budget-fill ${fillClass}`}
-                style={{ width: `${fillPct}%` }}
-                data-testid="pixel-budget-fill"
-              />
-            </div>
-            {overLimit && (
-              <p className="pixel-over-error">
-                Map exceeds the 3,000,000-pixel limit. Reduce width or height.
-              </p>
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="cta-button"
-            onClick={handleLaunch}
-            disabled={overLimit}
-            data-testid="open-editor-btn"
-          >
-            Open Editor →
-          </button>
-        </div>
-      </section>
-
       <footer className="landing-footer">
         OpenFront Map Editor — open source, runs entirely in your browser.
       </footer>
+    </div>
+  )
+}
+
+// ── New blank map panel ──────────────────────────────────────────────────────
+
+function NewMapPanel({ onEnterEditor }: { onEnterEditor: () => void }): React.ReactElement {
+  const [width, setWidth] = useState(1000)
+  const [height, setHeight] = useState(1000)
+
+  const handleLaunch = (): void => {
+    useEditorStore.getState().createBlankProject(width, height)
+    onEnterEditor()
+  }
+
+  return (
+    <div className="configurator-panel">
+      <h3>Create your map</h3>
+      <p className="configurator-panel-desc">Choose a size, then open the editor.</p>
+
+      <div className="size-inputs">
+        <label className="field">
+          <span>Width (tiles)</span>
+          <input
+            type="number"
+            min={1}
+            max={5000}
+            value={width}
+            onChange={(e) => setWidth(Math.max(1, Math.floor(Number(e.target.value))))}
+            data-testid="landing-width"
+          />
+        </label>
+        <label className="field">
+          <span>Height (tiles)</span>
+          <input
+            type="number"
+            min={1}
+            max={5000}
+            value={height}
+            onChange={(e) => setHeight(Math.max(1, Math.floor(Number(e.target.value))))}
+            data-testid="landing-height"
+          />
+        </label>
+      </div>
+
+      <button
+        type="button"
+        className="cta-button"
+        onClick={handleLaunch}
+        data-testid="open-editor-btn"
+      >
+        Open Editor →
+      </button>
+    </div>
+  )
+}
+
+// ── Import image panel ───────────────────────────────────────────────────────
+
+function ImportMapPanel({ onEnterEditor }: { onEnterEditor: () => void }): React.ReactElement {
+  const [status, setStatus] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleFile = async (file: File): Promise<void> => {
+    setBusy(true)
+    setStatus('Importing…')
+    try {
+      const project = await importImageAsProject(file)
+      useEditorStore.getState().loadProject(project)
+      setStatus(`Imported "${project.name}" (${project.width}×${project.height})`)
+      onEnterEditor()
+    } catch (err) {
+      setStatus(err instanceof ImportError ? err.message : 'Import failed.')
+      setBusy(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="configurator-panel">
+      <h3>Import image</h3>
+      <p className="configurator-panel-desc">
+        Load a PNG, JPEG, or WebP — the blue channel encodes terrain elevation.
+      </p>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) void handleFile(file)
+        }}
+      />
+
+      <button
+        type="button"
+        className="cta-button"
+        disabled={busy}
+        style={busy ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy ? 'Importing…' : 'Choose image →'}
+      </button>
+
+      {status && !status.startsWith('Imported') && (
+        <p className="pixel-over-error" style={{ marginTop: '10px' }}>
+          {status}
+        </p>
+      )}
     </div>
   )
 }

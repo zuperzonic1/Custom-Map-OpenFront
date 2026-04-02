@@ -3,10 +3,29 @@ import { immer } from 'zustand/middleware/immer'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { buildMapTexture, updateMapPixels } from '../lib/mapTexture'
 
+export const MAX_LAND_TILES = 3_000_000
+
+/**
+ * Module-level running land-tile count — updated inline by paintTilesDirect
+ * (hot path) and synced to the Zustand store on commitPaint / project load.
+ */
+let _landTileCount = 0
+
+function countLandTiles(terrain: Uint8Array): number {
+  let n = 0
+  for (let i = 0; i < terrain.length; i++) {
+    if (terrain[i] === 1) n++
+  }
+  return n
+}
+
 /**
  * Hot-path paint: mutates terrain/magnitude TypedArrays in-place WITHOUT
  * going through Immer.  After mutating, writes the changed pixels directly
  * into the shared ImageData buffer (no chunk cache, no LRU, no copy).
+ *
+ * Enforces the MAX_LAND_TILES limit: land tiles that would push the count
+ * over the limit are silently skipped.
  *
  * Call commitPaint() on pointerup to bump renderRevision and trigger the
  * persist middleware so the stroke is saved to localStorage.
@@ -16,20 +35,30 @@ export function paintTilesDirect(tileX: number, tileY: number): void {
   const radius = Math.max(0, brushSize - 1)
   const { terrain, magnitude, width, height } = project
 
+  let landDelta = 0
+
   for (let y = tileY - radius; y <= tileY + radius; y++) {
     if (y < 0 || y >= height) continue
     for (let x = tileX - radius; x <= tileX + radius; x++) {
       if (x < 0 || x >= width) continue
       const index = y * width + x
       if (tool === 'water') {
+        if (terrain[index] === 1) landDelta--
         terrain[index] = 0
         magnitude[index] = 0
       } else {
+        if (terrain[index] === 0) {
+          // Would add a new land tile — enforce limit
+          if (_landTileCount + landDelta >= MAX_LAND_TILES) continue
+          landDelta++
+        }
         terrain[index] = 1
-        magnitude[index] = tool === 'elevation' ? elevationValue : 180
+        magnitude[index] = elevationValue
       }
     }
   }
+
+  _landTileCount += landDelta
 
   // Write the painted rect directly into the shared ImageData buffer.
   updateMapPixels(project, tileX - radius, tileY - radius, tileX + radius, tileY + radius)
@@ -82,7 +111,7 @@ export type MapProject = {
   metadata: MapMetadata
 }
 
-export type EditorTool = 'land' | 'water' | 'elevation' | 'nation'
+export type EditorTool = 'land' | 'water' | 'nation'
 
 // Type for localStorage storage - uses base64 strings instead of arrays
 type SerializedProject = Omit<MapProject, 'terrain' | 'magnitude'> & {
@@ -99,6 +128,8 @@ type EditorStoreState = {
   zoom: number
   panX: number
   panY: number
+  /** Current number of land tiles — updated on commitPaint / project load. */
+  landTileCount: number
   /** CSS-pixel dimensions of the map canvas — updated by the renderer. */
   viewportWidth: number
   viewportHeight: number
@@ -117,6 +148,8 @@ type EditorStoreState = {
   setNationName: (name: string) => void
   setZoom: (zoom: number) => void
   setPan: (panX: number, panY: number) => void
+  /** Set zoom and pan in a single Immer/Zustand call to avoid double React re-renders. */
+  setZoomAndPan: (zoom: number, panX: number, panY: number) => void
   setViewport: (width: number, height: number) => void
   clearFitToView: () => void
   startPan: (clientX: number, clientY: number) => void
@@ -128,6 +161,8 @@ type EditorStoreState = {
   removeNation: (nationId: string) => void
   setProjectName: (name: string) => void
   setProjectMetadata: (key: keyof MapMetadata, value: string) => void
+  /** Replace the current project with a fully-formed MapProject (e.g. from image import). */
+  loadProject: (project: MapProject) => void
 }
 
 const DEFAULT_WIDTH = 64
@@ -240,6 +275,7 @@ export const useEditorStore = create<EditorStoreState>()(
       zoom: 1,
       panX: 0,
       panY: 0,
+      landTileCount: 0,
       viewportWidth: typeof window !== 'undefined' ? window.innerWidth : 800,
       viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 600,
       pendingFitToView: true,
@@ -254,9 +290,11 @@ export const useEditorStore = create<EditorStoreState>()(
         // is ready by the time the next render frame fires.
         const newProject = createBlankProject(width, height)
         buildMapTexture(newProject)
+        _landTileCount = 0
         set((state) => {
           state.project = newProject
           state.tool = 'land'
+          state.landTileCount = 0
           state.pendingFitToView = true
           state.renderRevision = (state.renderRevision ?? 0) + 1
         })
@@ -267,7 +305,7 @@ export const useEditorStore = create<EditorStoreState>()(
         }),
       setBrushSize: (brushSize) =>
         set((state) => {
-          state.brushSize = Math.max(1, Math.min(10, Math.round(brushSize)))
+          state.brushSize = Math.max(1, Math.min(50, Math.round(brushSize)))
         }),
       setElevationValue: (value) =>
         set((state) => {
@@ -283,6 +321,12 @@ export const useEditorStore = create<EditorStoreState>()(
         }),
       setPan: (panX, panY) =>
         set((state) => {
+          state.panX = panX
+          state.panY = panY
+        }),
+      setZoomAndPan: (zoom, panX, panY) =>
+        set((state) => {
+          state.zoom = Math.max(0.05, Math.min(6, zoom))
           state.panX = panX
           state.panY = panY
         }),
@@ -332,10 +376,16 @@ export const useEditorStore = create<EditorStoreState>()(
           // Signal persist middleware after a paint stroke ends.
           // terrain/magnitude were already mutated in-place by paintTilesDirect;
           // Immer finalises them with the same references.
+          state.landTileCount = _landTileCount
           state.renderRevision = (state.renderRevision ?? 0) + 1
         }),
       addNationAt: (tileX, tileY) =>
         set((state) => {
+          const { terrain, width, height } = state.project
+          // Only place nations on land tiles
+          if (tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) return
+          if (terrain[tileY * width + tileX] !== 1) return
+
           const label = state.nationName.trim() || `Spawn ${state.project.nations.length + 1}`
 
           state.project.nations.push({
@@ -361,6 +411,16 @@ export const useEditorStore = create<EditorStoreState>()(
           state.project.metadata[key] = value
           // Metadata changes don't affect visual rendering — no renderRevision bump needed
         }),
+      loadProject: (project) => {
+        buildMapTexture(project)
+        _landTileCount = countLandTiles(project.terrain)
+        set((state) => {
+          state.project = project
+          state.landTileCount = _landTileCount
+          state.pendingFitToView = true
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        })
+      },
     })),
     {
       name: 'openfront-editor-state',
@@ -378,7 +438,11 @@ export const useEditorStore = create<EditorStoreState>()(
       onRehydrateStorage: () => (state) => {
         // After localStorage data is parsed and merged, ensure the map texture
         // pixel buffer is built for the loaded (or initial) project.
-        if (state?.project) buildMapTexture(state.project)
+        if (state?.project) {
+          buildMapTexture(state.project)
+          _landTileCount = countLandTiles(state.project.terrain)
+          state.landTileCount = _landTileCount
+        }
       },
       merge: (persistedState, currentState) => {
         const saved = persistedState as Partial<EditorStoreState> & {

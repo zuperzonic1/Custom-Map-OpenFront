@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { autoDetectRenderer, Container, Sprite, Texture, type Renderer } from 'pixi.js'
+import { autoDetectRenderer, Container, Sprite, Text, Texture, type Renderer } from 'pixi.js'
 import { useEditorStore, paintTilesDirect } from '../store/editorStore'
 import {
   mapCanvas,
@@ -29,30 +29,41 @@ function createNationSprite(x: number, y: number, color: number, size: number): 
   return sprite
 }
 
-function createNationContainer(x: number, y: number, tileSize: number): Container {
+/**
+ * Creates a nation marker container anchored at the tile-centre in
+ * worldContainer local (world-pixel) space.  Children are expressed in
+ * screen-pixel units; the caller must set container.scale.set(1/zoom) every
+ * frame so the marker stays a constant physical size regardless of zoom.
+ */
+function createNationContainer(x: number, y: number, tileSize: number, name: string): Container {
   const container = new Container()
   container.label = `nation-${x}-${y}`
 
-  const centerX = x * tileSize + tileSize / 2
-  const centerY = y * tileSize + tileSize / 2
-  const markerSize = Math.max(8, tileSize * 0.45)
+  // Anchor in worldContainer space — zoom is applied by the parent.
+  container.position.set(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2)
 
-  container.addChild(
-    createNationSprite(
-      centerX - markerSize / 2 - 2,
-      centerY - markerSize / 2 - 2,
-      0x1e293b,
-      markerSize + 4,
-    ),
-  )
-  container.addChild(
-    createNationSprite(
-      centerX - markerSize / 2,
-      centerY - markerSize / 2,
-      0xff9726,
-      markerSize,
-    ),
-  )
+  // Marker is drawn in screen-pixel space (scale-compensated each frame).
+  const markerSize = 10
+
+  // Dark shadow
+  container.addChild(createNationSprite(-markerSize / 2 - 2, -markerSize / 2 - 2, 0x1e293b, markerSize + 4))
+  // Orange square
+  container.addChild(createNationSprite(-markerSize / 2, -markerSize / 2, 0xff9726, markerSize))
+
+  // Nation name label
+  const label = new Text({
+    text: name,
+    style: {
+      fontSize: 11,
+      fill: 0xffffff,
+      stroke: { color: 0x000000, width: 3 },
+      fontWeight: 'bold',
+      fontFamily: 'sans-serif',
+    },
+  })
+  label.anchor.set(0.5, 0)
+  label.position.set(0, markerSize / 2 + 3)
+  container.addChild(label)
 
   return container
 }
@@ -287,15 +298,24 @@ export function usePixiMapRenderer(
         .removeChildren()
         .forEach((child) => child.destroy({ children: true }))
       store.project.nations.forEach((nation) => {
-        nationContainer.addChild(createNationContainer(nation.x, nation.y, baseTileSize))
+        nationContainer.addChild(createNationContainer(nation.x, nation.y, baseTileSize, nation.name))
       })
       lastRenderRevisionRef.current = renderRevision
     }
 
-    // 5. Draw — one draw call for the map sprite + one for each nation marker.
+    // 5. Scale-compensate nation markers so they remain a constant screen size
+    //    regardless of the current zoom level.
+    if (nationContainer.children.length > 0) {
+      const invZoom = 1 / zoom
+      for (const child of nationContainer.children) {
+        child.scale.set(invZoom)
+      }
+    }
+
+    // 6. Draw — one draw call for the map sprite + one for each nation marker.
     renderer.render(worldContainer)
 
-    // 6. FPS counter — updated once per second.
+    // 7. FPS counter — updated once per second.
     const now = performance.now()
     fpsFrameCountRef.current += 1
     if (fpsLastTimeRef.current === 0) fpsLastTimeRef.current = now
@@ -425,8 +445,7 @@ export function PixiMapEditor() {
       const nextPanX = localX - worldX * (BASE_TILE_SIZE * nextZoom)
       const nextPanY = localY - worldY * (BASE_TILE_SIZE * nextZoom)
 
-      store.setZoom(nextZoom)
-      store.setPan(nextPanX, nextPanY)
+      store.setZoomAndPan(nextZoom, nextPanX, nextPanY)
     },
     [canvasRef],
   )

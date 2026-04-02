@@ -96,7 +96,7 @@
 /* ── map size configurator ─────────────────── */
 .landing-configurator {
   width: 100%;
-  max-width: 520px;
+  max-width: 860px;
 }
 
 .configurator-card {
@@ -220,6 +220,103 @@
   background: var(--panel-2);
   color: var(--text);
   box-shadow: none;
+}
+
+/* ── configurator split layout ─────────────── */
+.configurator-split {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  align-items: stretch;
+}
+
+.configurator-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 24px;
+}
+
+.configurator-panel:first-child {
+  padding-left: 0;
+}
+
+.configurator-panel:last-child {
+  padding-right: 0;
+}
+
+.configurator-panel h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.configurator-panel-desc {
+  margin: -12px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.configurator-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  gap: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.configurator-divider::before,
+.configurator-divider::after {
+  content: '';
+  flex: 1;
+  width: 1px;
+  background: var(--line);
+}
+
+.configurator-divider span {
+  padding: 6px 0;
+}
+
+@media (max-width: 600px) {
+  .configurator-split {
+    flex-direction: column;
+  }
+
+  .configurator-panel {
+    padding: 16px 0;
+  }
+
+  .configurator-panel:first-child {
+    padding-top: 0;
+  }
+
+  .configurator-panel:last-child {
+    padding-bottom: 0;
+  }
+
+  .configurator-divider {
+    flex-direction: row;
+    padding: 8px 0;
+  }
+
+  .configurator-divider::before,
+  .configurator-divider::after {
+    width: auto;
+    height: 1px;
+    flex: 1;
+  }
 }
 
 /* ── footer ────────────────────────────────── */
