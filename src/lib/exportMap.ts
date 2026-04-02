@@ -37,6 +37,10 @@ const BIT_OCEAN = 0x20
 const F_SHORELINE = 1
 const F_OCEAN = 2
 
+// Match Go map-generator thresholds
+const MIN_ISLAND_SIZE = 30
+const MIN_LAKE_SIZE = 200
+
 // ─── Flat grid ────────────────────────────────────────────────────────────────
 
 interface FlatGrid {
@@ -70,9 +74,82 @@ function buildGrid(
   return { terrain, mag, flags, width, height }
 }
 
-// ─── Water processing (ocean, shoreline, BFS distances) ──────────────────────
+// ─── Connected-component helper (4-neighbour flood fill) ─────────────────────
 
-function processWater(g: FlatGrid): void {
+function getConnectedArea(
+  terrain: Uint8Array,
+  width: number,
+  height: number,
+  startIdx: number,
+  visited: Uint8Array,
+  targetTerrain: 0 | 1,
+): number[] {
+  const area: number[] = []
+  const queue: number[] = [startIdx]
+  visited[startIdx] = 1
+  let head = 0
+
+  while (head < queue.length) {
+    const idx = queue[head++]
+    area.push(idx)
+    const x = idx % width
+    const y = (idx / width) | 0
+
+    if (x > 0) {
+      const n = idx - 1
+      if (!visited[n] && terrain[n] === targetTerrain) {
+        visited[n] = 1
+        queue.push(n)
+      }
+    }
+    if (x < width - 1) {
+      const n = idx + 1
+      if (!visited[n] && terrain[n] === targetTerrain) {
+        visited[n] = 1
+        queue.push(n)
+      }
+    }
+    if (y > 0) {
+      const n = idx - width
+      if (!visited[n] && terrain[n] === targetTerrain) {
+        visited[n] = 1
+        queue.push(n)
+      }
+    }
+    if (y < height - 1) {
+      const n = idx + width
+      if (!visited[n] && terrain[n] === targetTerrain) {
+        visited[n] = 1
+        queue.push(n)
+      }
+    }
+  }
+
+  return area
+}
+
+// ─── Small-island removal (Go parity) ─────────────────────────────────────────
+
+function removeSmallIslands(g: FlatGrid): void {
+  const { terrain, mag, width, height } = g
+  const size = width * height
+  const visited = new Uint8Array(size)
+
+  for (let startIdx = 0; startIdx < size; startIdx++) {
+    if (terrain[startIdx] !== 1 || visited[startIdx]) continue
+    const island = getConnectedArea(terrain, width, height, startIdx, visited, 1)
+    if (island.length < MIN_ISLAND_SIZE) {
+      for (const idx of island) {
+        terrain[idx] = 0
+        mag[idx] = 0
+      }
+    }
+  }
+}
+
+// ─── Water processing (ocean, lake-removal, shoreline, BFS distances) ────────
+
+function processWater(g: FlatGrid, removeSmall = false): void {
   const { terrain, mag, flags, width, height } = g
   const size = width * height
 
@@ -82,21 +159,7 @@ function processWater(g: FlatGrid): void {
 
   for (let startIdx = 0; startIdx < size; startIdx++) {
     if (terrain[startIdx] !== 0 || visited[startIdx]) continue
-    const body: number[] = []
-    const queue: number[] = [startIdx]
-    visited[startIdx] = 1
-    let head = 0
-    while (head < queue.length) {
-      const idx = queue[head++]
-      body.push(idx)
-      const x = idx % width
-      const y = (idx / width) | 0
-      if (x > 0 && !visited[idx - 1] && terrain[idx - 1] === 0) { visited[idx - 1] = 1; queue.push(idx - 1) }
-      if (x < width - 1 && !visited[idx + 1] && terrain[idx + 1] === 0) { visited[idx + 1] = 1; queue.push(idx + 1) }
-      if (y > 0 && !visited[idx - width] && terrain[idx - width] === 0) { visited[idx - width] = 1; queue.push(idx - width) }
-      if (y < height - 1 && !visited[idx + width] && terrain[idx + width] === 0) { visited[idx + width] = 1; queue.push(idx + width) }
-    }
-    waterBodies.push(body)
+    waterBodies.push(getConnectedArea(terrain, width, height, startIdx, visited, 0))
   }
 
   if (waterBodies.length === 0) return
@@ -107,7 +170,20 @@ function processWater(g: FlatGrid): void {
     flags[idx] |= F_OCEAN
   }
 
-  // ── 3. Shoreline identification ──
+  // ── 3. Remove small lakes (Go parity, only for full-res pass) ──
+  if (removeSmall) {
+    for (let i = 1; i < waterBodies.length; i++) {
+      const body = waterBodies[i]
+      if (body.length < MIN_LAKE_SIZE) {
+        for (const idx of body) {
+          terrain[idx] = 1
+          mag[idx] = 0
+        }
+      }
+    }
+  }
+
+  // ── 4. Shoreline identification ──
   const shoreWater: number[] = []
   for (let idx = 0; idx < size; idx++) {
     const t = terrain[idx]
@@ -124,7 +200,7 @@ function processWater(g: FlatGrid): void {
     }
   }
 
-  // ── 4. BFS from shore-water tiles to compute distance-to-land ──
+  // ── 5. BFS from shore-water tiles to compute distance-to-land ──
   const distVisited = new Uint8Array(size)
   const bfsQueue: number[] = []
   for (const idx of shoreWater) {
@@ -246,8 +322,16 @@ function renderThumbnail(g: FlatGrid, quality = 0.5): HTMLCanvasElement {
       const m = mag[si]
 
       if (!isLand) {
-        // All water tiles are transparent in thumbnail
-        d[di] = 70; d[di + 1] = 132; d[di + 2] = 180; d[di + 3] = 0
+        // Go parity: shoreline water vs deep water, both transparent.
+        if (shoreline) {
+          d[di] = 100; d[di + 1] = 143; d[di + 2] = 255; d[di + 3] = 0
+        } else {
+          const waterAdj = 11 - Math.min(m / 2, 10) - 10
+          d[di] = Math.max(0, Math.trunc(70 + waterAdj))
+          d[di + 1] = Math.max(0, Math.trunc(132 + waterAdj))
+          d[di + 2] = Math.max(0, Math.trunc(180 + waterAdj))
+          d[di + 3] = 0
+        }
       } else if (shoreline) {
         d[di] = 204; d[di + 1] = 203; d[di + 2] = 158; d[di + 3] = 255
       } else if (m < 10) {
@@ -275,12 +359,12 @@ function renderThumbnail(g: FlatGrid, quality = 0.5): HTMLCanvasElement {
 
 // ─── Blob helpers ─────────────────────────────────────────────────────────────
 
-function promiseCanvasBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
+function promiseCanvasBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) { reject(new Error('Unable to generate image blob')); return }
       resolve(blob)
-    }, type)
+    }, type, quality)
   })
 }
 
@@ -303,7 +387,8 @@ export async function buildExportBundle(project: MapProject): Promise<ExportBund
 
   // ── Full resolution grid ──
   const grid = buildGrid(project.terrain, project.magnitude, width, height)
-  processWater(grid)
+  removeSmallIslands(grid)
+  processWater(grid, true)
 
   // ── 4x minimap (half dimensions) ──
   const grid4x = createMiniGrid(grid)
@@ -321,13 +406,19 @@ export async function buildExportBundle(project: MapProject): Promise<ExportBund
   // ── Thumbnail (from 4x minimap, rendered at 0.5) ──
   const thumbCanvas = renderThumbnail(grid4x, 0.5)
   // Try WebP (Chrome/Edge support); PNG fallback handled implicitly
-  const thumbBlob = await promiseCanvasBlob(thumbCanvas, 'image/webp')
+  const thumbBlob = await promiseCanvasBlob(thumbCanvas, 'image/webp', 0.45)
   const thumbBuffer = new Uint8Array(await thumbBlob.arrayBuffer())
 
   // ── Manifest ──
   const manifest = {
     name: project.name,
-    nations: project.nations.map((n) => ({ id: n.id, name: n.name, x: n.x, y: n.y })),
+    // Match OpenFrontIO loader contract (TerrainMapLoader.Nation):
+    // { coordinates: [x, y], flag, name }
+    nations: project.nations.map((n) => ({
+      name: n.name,
+      flag: n.countryCode,
+      coordinates: [n.x, n.y] as [number, number],
+    })),
     metadata: project.metadata,
     generatedAt: new Date().toISOString(),
     map: { width, height, num_land_tiles: numLandTiles },
