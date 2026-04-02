@@ -10,7 +10,7 @@
 
 .topbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
@@ -24,6 +24,31 @@
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.topbar-home-btn {
+  padding: 6px 10px 6px 6px;
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  transition: background 150ms ease;
+}
+
+.topbar-home-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.topbar-home-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+  transform: none;
+}
+
+.topbar-home-btn .eyebrow {
+  pointer-events: none;
+}
+
+.topbar-home-btn h1 {
+  pointer-events: none;
 }
 
 .editor-logo {
@@ -49,7 +74,7 @@
 
 .topbar-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
   justify-content: flex-end;

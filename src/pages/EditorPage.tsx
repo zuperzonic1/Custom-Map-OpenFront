@@ -135,7 +135,12 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="topbar-left">
+        <button
+          type="button"
+          className="topbar-left topbar-home-btn"
+          onClick={onGoHome}
+          aria-label="Go to home"
+        >
           <img
             src="/Openfront-Editor-Logo.png"
             alt="OpenFront Editor Logo"
@@ -145,12 +150,9 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
             <p className="eyebrow">OpenFront map editor</p>
             <h1>Map Editor</h1>
           </div>
-        </div>
+        </button>
 
         <div className="topbar-actions">
-          <button type="button" className="secondary" onClick={onGoHome}>
-            ← Home
-          </button>
           <label className="field field-inline">
             <span>Name</span>
             <input
