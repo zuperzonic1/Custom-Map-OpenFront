@@ -141,7 +141,7 @@ function ZoomControl(): React.ReactElement {
   const zoom = useViewportStore((state) => state.zoom)
 
   const handleZoomSliderChange = (value: number): void => {
-    const clamped = Math.max(0.05, Math.min(6, value))
+    const clamped = Math.max(0.001, Math.min(6, value))
     useViewportStore.setState({ zoom: clamped })
   }
 
@@ -150,9 +150,9 @@ function ZoomControl(): React.ReactElement {
       <span>Zoom</span>
       <input
         type="range"
-        min="0.05"
+        min="0.001"
         max="6"
-        step="0.05"
+        step="0.001"
         value={zoom}
         onInput={(event) => handleZoomSliderChange(Number(event.currentTarget.value))}
         onChange={(event) => handleZoomSliderChange(Number(event.currentTarget.value))}
