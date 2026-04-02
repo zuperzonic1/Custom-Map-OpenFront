@@ -118,10 +118,8 @@ export function usePixiMapRenderer(
     const { project } = store
     const vw = renderer.screen.width
     const vh = renderer.screen.height
-    const fitZoom = Math.min(
-      6,
-      Math.max(0.05, Math.min(vw / (project.width * baseTileSize), vh / (project.height * baseTileSize))),
-    )
+    // Calculate zoom to fit entire map in viewport (no artificial minimum for large maps)
+    const fitZoom = Math.min(6, Math.min(vw / (project.width * baseTileSize), vh / (project.height * baseTileSize)))
     const panX = (vw - project.width * baseTileSize * fitZoom) / 2
     const panY = (vh - project.height * baseTileSize * fitZoom) / 2
     useViewportStore.setState({ zoom: fitZoom, panX, panY })
@@ -437,7 +435,7 @@ export function PixiMapEditor() {
 
       const rect = canvas.getBoundingClientRect()
       const factor = Math.exp(-event.deltaY * 0.001)
-      const nextZoom = Math.min(6, Math.max(0.05, viewport.zoom * factor))
+      const nextZoom = Math.min(6, Math.max(0.001, viewport.zoom * factor))
 
       const localX = event.clientX - rect.left
       const localY = event.clientY - rect.top

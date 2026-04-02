@@ -100,9 +100,6 @@ function computeWaterMagnitude(
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Maximum importable pixel count (matches the editor's own limit). */
-export const MAX_IMPORT_PIXELS = 3_000_000
-
 export class ImportError extends Error {}
 
 /**
@@ -119,14 +116,6 @@ export async function importImageAsProject(file: File): Promise<MapProject> {
   }
 
   const { width, height } = bitmap
-
-  if (width * height > MAX_IMPORT_PIXELS) {
-    bitmap.close()
-    throw new ImportError(
-      `Image is too large (${width}×${height} = ${(width * height).toLocaleString()} px). ` +
-        `Maximum is ${MAX_IMPORT_PIXELS.toLocaleString()} px.`,
-    )
-  }
 
   const canvas = document.createElement('canvas')
   canvas.width = width
