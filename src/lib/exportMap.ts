@@ -354,42 +354,58 @@ export async function buildExportBundle(project: MapProject): Promise<ExportBund
   }
 }
 
-// ─── PNG export (visual preview) ─────────────────────────────────────────────
+function magnitudeToExportBlue(magnitude: number): number {
+  const m = Math.max(0, Math.min(30, Math.round(magnitude)))
+
+  if (m <= 9) {
+    return 140 + Math.round((m / 9) * 18)
+  }
+
+  if (m <= 19) {
+    return 159 + Math.round(((m - 10) / 9) * 19)
+  }
+
+  return 179 + Math.round(((m - 20) / 10) * 21)
+}
+
+// ─── PNG export (import-compatible preview) ───────────────────────────────────
 
 /**
- * Export a PNG using the same thumbnail colour scheme as the official generator.
- * 1 pixel per tile — nations drawn as orange dots.
+ * Export a PNG that matches the importer's blue-channel format.
+ * Land tiles encode elevation in the blue channel; water tiles are transparent.
  */
 export async function buildExportPng(project: MapProject): Promise<Blob> {
-  const { width, height, terrain, magnitude, nations } = project
+  const { width, height, terrain, magnitude } = project
 
-  // Reuse the same processWater logic so colours reflect computed shorelines
-  const grid = buildGrid(terrain, magnitude, width, height)
-  processWater(grid)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
 
-  // Render at 1:1 (quality=1 relative to grid size)
-  const canvas = renderThumbnail(grid, 1)
-  // Make water opaque for a standalone PNG
-  const ctx = canvas.getContext('2d')!
-  const imgData = ctx.getImageData(0, 0, width, height)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Could not acquire 2D canvas context.')
+  }
+
+  const imgData = ctx.createImageData(width, height)
   const d = imgData.data
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) {
-      // Transparent water → opaque water blue
-      d[i] = 0x0b; d[i + 1] = 0x4f; d[i + 2] = 0x6c; d[i + 3] = 255
+
+  for (let i = 0; i < width * height; i++) {
+    const base = i * 4
+    if (terrain[i] === 0) {
+      d[base] = 0
+      d[base + 1] = 0
+      d[base + 2] = 0
+      d[base + 3] = 0
+      continue
     }
+
+    d[base] = 0
+    d[base + 1] = 0
+    d[base + 2] = magnitudeToExportBlue(magnitude[i])
+    d[base + 3] = 255
   }
+
   ctx.putImageData(imgData, 0, 0)
-
-  // Draw nations as orange dots
-  const dotRadius = Math.max(2, Math.min(6, width / 200))
-  ctx.fillStyle = '#f97316'
-  for (const nation of nations) {
-    ctx.beginPath()
-    ctx.arc(nation.x + 0.5, nation.y + 0.5, dotRadius, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
   return promiseCanvasBlob(canvas, 'image/png')
 }
 

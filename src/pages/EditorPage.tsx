@@ -6,6 +6,39 @@ import { PixiMapEditor as PixiCanvas } from '../lib/pixiMapRenderer'
 import { ControlsPanel } from '../components/ControlsPanel'
 import { InfoPanel } from '../components/InfoPanel'
 
+const COUNTRY_CODES = [
+  'AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AW', 'AX', 'AZ',
+  'BA', 'BB', 'BD', 'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS',
+  'BT', 'BV', 'BW', 'BY', 'BZ',
+  'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW',
+  'CX', 'CY', 'CZ',
+  'DE', 'DJ', 'DK', 'DM', 'DO', 'DZ',
+  'EC', 'EE', 'EG', 'EH', 'ER', 'ES', 'ET',
+  'FI', 'FJ', 'FK', 'FM', 'FO', 'FR',
+  'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 'GQ', 'GR', 'GS', 'GT',
+  'GU', 'GW', 'GY',
+  'HK', 'HM', 'HN', 'HR', 'HT', 'HU',
+  'ID', 'IE', 'IL', 'IM', 'IN', 'IO', 'IQ', 'IR', 'IS', 'IT',
+  'JE', 'JM', 'JO', 'JP',
+  'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ',
+  'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LT', 'LU', 'LV', 'LY',
+  'MA', 'MC', 'MD', 'ME', 'MF', 'MG', 'MH', 'MK', 'ML', 'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS',
+  'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ',
+  'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ',
+  'OM',
+  'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN', 'PR', 'PS', 'PT', 'PW', 'PY',
+  'QA',
+  'RE', 'RO', 'RS', 'RU', 'RW',
+  'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH', 'SI', 'SJ', 'SK', 'SL', 'SM', 'SN', 'SO', 'SR', 'SS',
+  'ST', 'SV', 'SX', 'SY', 'SZ',
+  'TC', 'TD', 'TF', 'TG', 'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TR', 'TT', 'TV', 'TW', 'TZ',
+  'UA', 'UG', 'UM', 'US', 'UY', 'UZ',
+  'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU',
+  'WF', 'WS',
+  'YE', 'YT',
+  'ZA', 'ZM', 'ZW',
+] as const
+
 interface EditorPageProps {
   onGoHome: () => void
 }
@@ -14,7 +47,13 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
   const projectName = useEditorStore((state) => state.project.name)
   const projectWidth = useEditorStore((state) => state.project.width)
   const projectHeight = useEditorStore((state) => state.project.height)
+  const pendingNationPlacement = useEditorStore((state) => state.pendingNationPlacement)
+  const nationName = useEditorStore((state) => state.nationName)
+  const nationCountryCode = useEditorStore((state) => state.nationCountryCode)
   const setNationName = useEditorStore((state) => state.setNationName)
+  const setNationCountryCode = useEditorStore((state) => state.setNationCountryCode)
+  const confirmNationPlacement = useEditorStore((state) => state.confirmNationPlacement)
+  const cancelNationPlacement = useEditorStore((state) => state.cancelNationPlacement)
   const setElevationValue = useEditorStore((state) => state.setElevationValue)
 
   const [exportStatus, setExportStatus] = React.useState('Idle')
@@ -22,6 +61,7 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
 
   const resetProject = (): void => {
     setNationName('Spawn 1')
+    setNationCountryCode('US')
     setElevationValue(128)
     useEditorStore.getState().createBlankProject(projectWidth, projectHeight)
   }
@@ -60,9 +100,9 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-left">
-          <img 
-            src="/Openfront-Editor-Logo.png" 
-            alt="OpenFront Editor Logo" 
+          <img
+            src="/Openfront-Editor-Logo.png"
+            alt="OpenFront Editor Logo"
             className="editor-logo"
           />
           <div>
@@ -99,17 +139,69 @@ export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
           <div className="footer-note">
             <span>Drag to paint.</span>
             <span>Hold Space and drag to pan.</span>
-            <span>Nation tool places spawn points.</span>
+            <span>Nation tool opens a placement dialog.</span>
           </div>
         </main>
 
-          <InfoPanel
-            exportStatus={exportStatus}
-            exportFiles={exportFiles}
-            onExportMap={() => void handleExportMap()}
-            onExportPng={() => void handleExportPng()}
-          />
+        <InfoPanel
+          exportStatus={exportStatus}
+          exportFiles={exportFiles}
+          onExportMap={() => void handleExportMap()}
+          onExportPng={() => void handleExportPng()}
+        />
       </section>
+
+      {pendingNationPlacement && (
+        <div className="modal-backdrop" role="presentation" onClick={cancelNationPlacement}>
+          <div
+            className="nation-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nation-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="nation-modal-title">Place nation</h2>
+            <p>
+              Confirm the nation name and flag code for the selected land tile.
+            </p>
+
+            <div className="nation-modal-grid">
+              <label className="field">
+                <span>Nation name</span>
+                <input
+                  value={nationName}
+                  onChange={(event) => setNationName(event.target.value)}
+                  placeholder="Spawn 1"
+                />
+              </label>
+
+              <label className="field">
+                <span>Flag country code</span>
+                <select
+                  value={nationCountryCode}
+                  onChange={(event) => setNationCountryCode(event.target.value)}
+                  title="ISO 3166-1 alpha-2 country code"
+                >
+                  {COUNTRY_CODES.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="nation-modal-actions">
+              <button type="button" className="secondary" onClick={cancelNationPlacement}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={confirmNationPlacement}>
+                Place nation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

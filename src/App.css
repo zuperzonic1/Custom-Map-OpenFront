@@ -122,6 +122,19 @@ button:active,
   transform: translateY(1px);
 }
 
+.primary {
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: #04111f;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  font-weight: 700;
+}
+
+.primary:hover {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  filter: brightness(1.05);
+}
+
 .button-group button.active {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #04111f;
@@ -343,6 +356,50 @@ button:active,
   background: rgba(15, 23, 42, 0.6);
   color: #94a3b8;
   font-size: 13px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.68);
+  backdrop-filter: blur(6px);
+}
+
+.nation-modal {
+  width: min(520px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.nation-modal h2 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 22px;
+}
+
+.nation-modal p {
+  margin: 0 0 18px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.nation-modal-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.nation-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 @media (max-width: 1200px) {

@@ -36,7 +36,13 @@ function createNationSprite(x: number, y: number, color: number, size: number): 
  * screen-pixel units; the caller must set container.scale.set(1/zoom) every
  * frame so the marker stays a constant physical size regardless of zoom.
  */
-function createNationContainer(x: number, y: number, tileSize: number, name: string): Container {
+function createNationContainer(
+  x: number,
+  y: number,
+  tileSize: number,
+  name: string,
+  countryCode: string,
+): Container {
   const container = new Container()
   container.label = `nation-${x}-${y}`
 
@@ -53,9 +59,9 @@ function createNationContainer(x: number, y: number, tileSize: number, name: str
 
   // Nation name label
   const label = new Text({
-    text: name,
-    style: {
-      fontSize: 11,
+    text: `${name} [${countryCode || 'US'}]`,
+      style: {
+        fontSize: 13,
       fill: 0xffffff,
       stroke: { color: 0x000000, width: 3 },
       fontWeight: 'bold',
@@ -298,7 +304,15 @@ export function usePixiMapRenderer(
         .removeChildren()
         .forEach((child) => child.destroy({ children: true }))
       store.project.nations.forEach((nation) => {
-        nationContainer.addChild(createNationContainer(nation.x, nation.y, baseTileSize, nation.name))
+        nationContainer.addChild(
+          createNationContainer(
+            nation.x,
+            nation.y,
+            baseTileSize,
+            nation.name,
+            nation.countryCode || 'US',
+          ),
+        )
       })
       lastRenderRevisionRef.current = renderRevision
     }

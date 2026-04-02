@@ -93,6 +93,7 @@ export type TerrainType = 0 | 1
 export type Nation = {
   id: string
   name: string
+  countryCode: string
   x: number
   y: number
 }
@@ -114,6 +115,11 @@ export type MapProject = {
 
 export type EditorTool = 'land' | 'water' | 'nation'
 
+type PendingNationPlacement = {
+  x: number
+  y: number
+} | null
+
 // Type for localStorage storage - uses base64 strings instead of arrays
 type SerializedProject = Omit<MapProject, 'terrain' | 'magnitude'> & {
   terrain: string
@@ -126,6 +132,8 @@ type EditorStoreState = {
   brushSize: number
   elevationValue: number
   nationName: string
+  nationCountryCode: string
+  pendingNationPlacement: PendingNationPlacement
   landTileCount: number
   renderRevision: number
   createBlankProject: (width?: number, height?: number) => void
@@ -133,9 +141,12 @@ type EditorStoreState = {
   setBrushSize: (brushSize: number) => void
   setElevationValue: (value: number) => void
   setNationName: (name: string) => void
+  setNationCountryCode: (countryCode: string) => void
   paintAt: (tileX: number, tileY: number) => void
   commitPaint: () => void
   addNationAt: (tileX: number, tileY: number) => void
+  confirmNationPlacement: () => void
+  cancelNationPlacement: () => void
   removeNation: (nationId: string) => void
   setProjectName: (name: string) => void
   setProjectMetadata: (key: keyof MapMetadata, value: string) => void
@@ -189,7 +200,10 @@ function deserializeProject(project: SerializedProject | MapProject): MapProject
       project.magnitude instanceof Uint8Array
         ? project.magnitude
         : base64ToTypedArray(project.magnitude as string),
-    nations: project.nations ?? [],
+    nations: (project.nations ?? []).map((nation) => ({
+      ...nation,
+      countryCode: nation.countryCode || 'US',
+    })),
     metadata: project.metadata ?? {
       author: '',
       description: '',
@@ -208,6 +222,7 @@ type PartializedEditorState = {
   brushSize: number
   elevationValue: number
   nationName: string
+  nationCountryCode: string
 }
 
 /**
@@ -282,6 +297,8 @@ export const useEditorStore = create<EditorStoreState>()(
       brushSize: 1,
       elevationValue: 128,
       nationName: 'Spawn 1',
+      nationCountryCode: 'US',
+      pendingNationPlacement: null,
       landTileCount: 0,
       renderRevision: 0,
       createBlankProject: (width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) => {
@@ -291,6 +308,9 @@ export const useEditorStore = create<EditorStoreState>()(
         set((state) => {
           state.project = newProject
           state.tool = 'land'
+          state.nationName = 'Spawn 1'
+          state.nationCountryCode = 'US'
+          state.pendingNationPlacement = null
           state.landTileCount = 0
           state.renderRevision = (state.renderRevision ?? 0) + 1
         })
@@ -299,6 +319,9 @@ export const useEditorStore = create<EditorStoreState>()(
       setTool: (tool) =>
         set((state) => {
           state.tool = tool
+          if (tool !== 'nation') {
+            state.pendingNationPlacement = null
+          }
         }),
       setBrushSize: (brushSize) =>
         set((state) => {
@@ -311,6 +334,10 @@ export const useEditorStore = create<EditorStoreState>()(
       setNationName: (name) =>
         set((state) => {
           state.nationName = name
+        }),
+      setNationCountryCode: (countryCode) =>
+        set((state) => {
+          state.nationCountryCode = countryCode
         }),
       paintAt: (tileX, tileY) => {
         paintTilesDirect(tileX, tileY)
@@ -326,15 +353,45 @@ export const useEditorStore = create<EditorStoreState>()(
           if (tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) return
           if (terrain[tileY * width + tileX] !== 1) return
 
+          if (!state.nationName.trim()) {
+            state.nationName = `Spawn ${state.project.nations.length + 1}`
+          }
+
+          state.pendingNationPlacement = {
+            x: tileX,
+            y: tileY,
+          }
+        }),
+      confirmNationPlacement: () =>
+        set((state) => {
+          const pending = state.pendingNationPlacement
+          if (!pending) return
+
+          const { terrain, width, height } = state.project
+          if (pending.x < 0 || pending.x >= width || pending.y < 0 || pending.y >= height) {
+            state.pendingNationPlacement = null
+            return
+          }
+          if (terrain[pending.y * width + pending.x] !== 1) {
+            state.pendingNationPlacement = null
+            return
+          }
+
           const label = state.nationName.trim() || `Spawn ${state.project.nations.length + 1}`
 
           state.project.nations.push({
             id: createNationId(),
             name: label,
-            x: tileX,
-            y: tileY,
+            countryCode: state.nationCountryCode || 'US',
+            x: pending.x,
+            y: pending.y,
           })
+          state.pendingNationPlacement = null
           state.renderRevision = (state.renderRevision ?? 0) + 1
+        }),
+      cancelNationPlacement: () =>
+        set((state) => {
+          state.pendingNationPlacement = null
         }),
       removeNation: (nationId) =>
         set((state) => {
@@ -369,6 +426,7 @@ export const useEditorStore = create<EditorStoreState>()(
         brushSize: state.brushSize,
         elevationValue: state.elevationValue,
         nationName: state.nationName,
+        nationCountryCode: state.nationCountryCode,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.project) {

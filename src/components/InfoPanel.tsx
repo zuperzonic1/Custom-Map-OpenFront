@@ -72,7 +72,7 @@ function MetadataSection(): React.ReactElement {
 function NationsSection({
   nations,
 }: {
-  nations: Array<{ id: string; name: string; x: number; y: number }>
+  nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }>
 }): React.ReactElement {
   const removeNation = useEditorStore((state) => state.removeNation)
 
@@ -84,17 +84,19 @@ function NationsSection({
       ) : (
         <ul className="nations-list">
           {nations.map((nation) => (
-            <li key={nation.id} className="nation-row">
-              <div>
-                <strong>{nation.name}</strong>
-                <span>
-                  {nation.x}, {nation.y}
-                </span>
-              </div>
-              <button type="button" className="secondary" onClick={() => removeNation(nation.id)}>
-                Remove
-              </button>
-            </li>
+              <li key={nation.id} className="nation-row">
+                <div>
+                  <strong>
+                    {nation.name} [{nation.countryCode || 'US'}]
+                  </strong>
+                  <span>
+                    {nation.x}, {nation.y}
+                  </span>
+                </div>
+                <button type="button" className="secondary" onClick={() => removeNation(nation.id)}>
+                  Remove
+                </button>
+              </li>
           ))}
         </ul>
       )}

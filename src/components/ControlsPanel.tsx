@@ -22,7 +22,7 @@ export function ControlsPanel({
 
       <BrushSizeControl />
       <ElevationControl />
-      <NationNameControl />
+      <NationPlacementHelp />
       <ZoomControl />
 
       <MapSizePanel
@@ -121,19 +121,18 @@ function ElevationControl(): React.ReactElement {
   )
 }
 
-function NationNameControl(): React.ReactElement {
-  const nationName = useEditorStore((state) => state.nationName)
-  const setNationName = useEditorStore((state) => state.setNationName)
+function NationPlacementHelp(): React.ReactElement {
+  const pendingNationPlacement = useEditorStore((state) => state.pendingNationPlacement)
 
   return (
-    <label className="field">
-      <span>Nation name</span>
-      <input
-        value={nationName}
-        onChange={(event) => setNationName(event.target.value)}
-        placeholder="Spawn 1"
-      />
-    </label>
+    <div className="status-card">
+      <h3>Nation placement</h3>
+      <p className="empty-state">
+        {pendingNationPlacement
+          ? 'Nation dialog is open. Confirm or cancel it in the center of the screen.'
+          : 'Select Nation, then click a land tile to open the nation dialog.'}
+      </p>
+    </div>
   )
 }
 
@@ -233,7 +232,7 @@ function ProjectInfoPanel({ width, height }: { width: number; height: number }):
           <dt>Land tiles</dt>
           <dd style={{ color: atLimit ? '#f87171' : undefined }}>
             {landTileCount.toLocaleString()} / {MAX_LAND_TILES.toLocaleString()}
-            {atLimit && ' \u26a0'}
+            {atLimit && ' '}
           </dd>
         </div>
         <div>
