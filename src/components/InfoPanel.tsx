@@ -238,8 +238,22 @@ function Minimap({
 
       if (cx2 > cx1 && cy2 > cy1) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
-        ctx.lineWidth = 1.5
-        ctx.strokeRect(cx1 + 0.5, cy1 + 0.5, cx2 - cx1 - 1, cy2 - cy1 - 1)
+        const lw = 1.5
+        ctx.lineWidth = lw
+        const dpr = window.devicePixelRatio || 1
+        // Inset enough so the full stroke is visible even at canvas edges
+        const inset = Math.ceil(lw * dpr) / dpr
+        const rx = cx1 + inset
+        const ry = cy1 + inset
+        const rw = cx2 - cx1 - inset * 2
+        const rh = cy2 - cy1 - inset * 2
+        if (rw > 0 && rh > 0) {
+          // Match the 12px CSS border-radius of .minimap-frame
+          const r = Math.min(12 * dpr, rw / 2, rh / 2)
+          ctx.beginPath()
+          ctx.roundRect(rx, ry, rw, rh, r)
+          ctx.stroke()
+        }
       }
     }
 
