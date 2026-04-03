@@ -2,6 +2,28 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useEditorStore, MAX_LAND_TILES } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
 
+/** Inline eyedropper/pipette SVG icon. */
+function EyedropperIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 22a1 1 0 0 1-1-1v-1H7a1 1 0 0 1-.707-1.707l9.9-9.9a1 1 0 0 1 1.414 0l2 2a1 1 0 0 1 0 1.414l-9.9 9.9A1 1 0 0 1 10 22H9v1a1 1 0 0 1-1 1" />
+      <path d="m18.5 2.5 3 3" />
+      <path d="M15 5 3 17l4 4L19 9" />
+    </svg>
+  )
+}
+
 export interface ControlsPanelProps {
   onResetMap?: () => void
   onCreateBlankMap: (width: number, height: number) => void
@@ -108,6 +130,8 @@ function BrushSizeControl(): React.ReactElement {
 function ElevationControl(): React.ReactElement {
   const elevationValue = useEditorStore((state) => state.elevationValue)
   const setElevationValue = useEditorStore((state) => state.setElevationValue)
+  const isSampling = useEditorStore((state) => state.isSampling)
+  const setIsSampling = useEditorStore((state) => state.setIsSampling)
 
   return (
     <label className="field">
@@ -120,7 +144,18 @@ function ElevationControl(): React.ReactElement {
         onInput={(event) => setElevationValue(Number(event.currentTarget.value))}
         onChange={(event) => setElevationValue(Number(event.currentTarget.value))}
       />
-      <strong>{elevationValue}</strong>
+      <div className="elevation-value-row">
+        <strong>{elevationValue}</strong>
+        <button
+          type="button"
+          className={`sampler-btn${isSampling ? ' active' : ''}`}
+          title="Sample elevation from map (or hold Alt + click on canvas)"
+          aria-label="Sample elevation from map"
+          onClick={() => setIsSampling(!isSampling)}
+        >
+          <EyedropperIcon />
+        </button>
+      </div>
     </label>
   )
 }
@@ -276,6 +311,7 @@ const SHORTCUTS = [
   { keys: 'Scroll Wheel', action: 'Zoom in / out' },
   { keys: 'Ctrl + Z', action: 'Undo' },
   { keys: 'Ctrl + Y  /  Ctrl + Shift + Z', action: 'Redo' },
+  { keys: 'Alt + Click (Land tool)', action: 'Sample elevation' },
 ]
 
 function ShortcutsButton(): React.ReactElement {

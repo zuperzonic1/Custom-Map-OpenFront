@@ -545,8 +545,13 @@ export function PixiMapEditor() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement
+      // Only block undo/redo shortcuts when the user is actually typing in a
+      // text-entry control.  Range sliders, checkboxes, and buttons are
+      // HTMLInputElement too but don't consume Ctrl+Z, so we must NOT block
+      // undo when they are focused (e.g. the elevation / brush / zoom sliders).
+      const TEXT_INPUT_TYPES = new Set(['text', 'password', 'email', 'number', 'search', 'tel', 'url'])
       const isEditableTarget =
-        activeElement instanceof HTMLInputElement ||
+        (activeElement instanceof HTMLInputElement && TEXT_INPUT_TYPES.has(activeElement.type)) ||
         activeElement instanceof HTMLTextAreaElement ||
         (activeElement instanceof HTMLElement && activeElement.isContentEditable)
 
@@ -704,6 +709,14 @@ export function PixiMapEditor() {
     const tile = getTileFromPoint(event.clientX, event.clientY)
     if (!tile) return
 
+    // ── Elevation sampler ────────────────────────────────────────────────────
+    // Triggered by: sampler-mode toggle OR Alt+click while on the land tool.
+    if (store.isSampling || (event.altKey && store.tool === 'land')) {
+      event.preventDefault()
+      store.sampleElevationAt(tile.x, tile.y)
+      return
+    }
+
     if (store.tool === 'nation') {
       store.addNationAt(tile.x, tile.y)
       return
@@ -755,10 +768,17 @@ export function PixiMapEditor() {
     pointerSequenceActiveRef.current = false
   }
 
+  // Derive the canvas cursor based on tool / sampling state.
+  const isSampling = useEditorStore((state) => state.isSampling)
+  const canvasCursor = isSampling ? 'crosshair' : 'crosshair'
+  // We keep crosshair as the base; browser-native eyedropper cursors are
+  // inconsistent across OSes. The sampler-active class adds a CSS ring instead.
+
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '100%', position: 'relative', cursor: 'crosshair' }}
+      style={{ width: '100%', height: '100%', position: 'relative', cursor: canvasCursor }}
+      className={isSampling ? 'canvas-sampling' : undefined}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

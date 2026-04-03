@@ -20,6 +20,20 @@ let _landTileCount = 0
  */
 let _isPainting = false
 
+/**
+ * Tracks when the current paint stroke began (ms since epoch).
+ * Used to detect stuck _isPainting flags that were never committed
+ * (e.g. pointer-up missed while tab was backgrounded).
+ */
+let _paintStartTime = 0
+
+/**
+ * Reentrancy guard for undo/redo — prevents a second undo/redo from running
+ * while one is already in progress (e.g. keyboard repeat or React strict mode
+ * firing the handler twice in the same tick).
+ */
+let _isUndoRedoInProgress = false
+
 function countLandTiles(terrain: Uint8Array): number {
   let n = 0
   for (let i = 0; i < terrain.length; i++) {
@@ -153,6 +167,9 @@ type EditorStoreState = {
   paintAt: (tileX: number, tileY: number) => void
   beginPaint: () => void
   commitPaint: () => void
+  isSampling: boolean
+  setIsSampling: (value: boolean) => void
+  sampleElevationAt: (tileX: number, tileY: number) => void
   addNationAt: (tileX: number, tileY: number) => void
   confirmNationPlacement: () => void
   cancelNationPlacement: () => void
@@ -324,10 +341,14 @@ export const useEditorStore = create<EditorStoreState>()(
       pendingNationPlacement: null,
       landTileCount: 0,
       renderRevision: 0,
+      isSampling: false,
       createBlankProject: (width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) => {
         const newProject = createBlankProject(width, height)
         buildMapTexture(newProject)
         _landTileCount = 0
+        _isPainting = false
+        _isUndoRedoInProgress = false
+        useUndoStore.getState().clear()
         set((state) => {
           state.project = newProject
           state.tool = 'land'
@@ -362,6 +383,21 @@ export const useEditorStore = create<EditorStoreState>()(
         set((state) => {
           state.nationCountryCode = countryCode
         }),
+      setIsSampling: (value) =>
+        set((state) => {
+          state.isSampling = value
+        }),
+      sampleElevationAt: (tileX, tileY) => {
+        const { project } = useEditorStore.getState()
+        const { terrain, magnitude, width, height } = project
+        if (tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) return
+        if (terrain[tileY * width + tileX] !== 1) return
+        const sampled = magnitude[tileY * width + tileX]
+        set((state) => {
+          state.elevationValue = sampled
+          state.isSampling = false
+        })
+      },
       paintAt: (tileX, tileY) => {
         paintTilesDirect(tileX, tileY)
       },
@@ -371,13 +407,17 @@ export const useEditorStore = create<EditorStoreState>()(
         // Use _landTileCount (module-level, always current) not the store's
         // landTileCount which may be stale if a prior commit was missed.
         _isPainting = true
+        _paintStartTime = Date.now()
         const { project } = useEditorStore.getState()
         useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
       },
       commitPaint: () => {
         // Guard: no-op if no stroke is in-flight (prevents double-commits from
         // handleMouseLeave + handlePointerUp firing in quick succession).
-        if (!_isPainting) return
+        // Also force-commit if the flag has been stuck for > 8 s (pointer-up
+        // was missed while the tab was backgrounded or the window lost focus).
+        const stuckTimeout = 8_000
+        if (!_isPainting && !(Date.now() - _paintStartTime > stuckTimeout)) return
         _isPainting = false
         set((state) => {
           state.landTileCount = _landTileCount
@@ -509,43 +549,72 @@ export const useEditorStore = create<EditorStoreState>()(
         // commitPaint() is called by the keyboard/button handler before invoking
         // undo(), so _isPainting is always false here. _landTileCount is the
         // authoritative land count (store's landTileCount may lag one tick).
-        const { project } = useEditorStore.getState()
-        const undoStore = useUndoStore.getState()
-        if (!undoStore.canUndo()) return
-        // Save current state to redo stack BEFORE popping undo.
-        undoStore.peekCurrentForRedo(project.terrain, project.magnitude, project.nations, _landTileCount)
-        const snapshot = undoStore.popUndo()
-        if (!snapshot) return
-        // Copy snapshot data into the live arrays (TypedArrays are not Immer-proxied).
-        project.terrain.set(snapshot.terrain)
-        project.magnitude.set(snapshot.magnitude)
-        buildMapTexture(project)
-        _landTileCount = snapshot.landTileCount
-        set((state) => {
-          state.project.nations = snapshot.nations.map((n) => ({ ...n }))
-          state.landTileCount = snapshot.landTileCount
-          state.renderRevision = (state.renderRevision ?? 0) + 1
-        })
+        if (_isUndoRedoInProgress) return
+        _isUndoRedoInProgress = true
+        try {
+          const { project } = useEditorStore.getState()
+          const undoStore = useUndoStore.getState()
+          if (!undoStore.canUndo()) return
+          const snapshot = undoStore.popUndo()
+          if (!snapshot) return
+          // Dimension mismatch guard — snapshot from a different map size is unsafe
+          if (
+            snapshot.terrain.length !== project.terrain.length ||
+            snapshot.magnitude.length !== project.magnitude.length
+          ) {
+            undoStore.clear()
+            return
+          }
+          // Save current state to redo stack AFTER popping undo (so the redo
+          // reference is stable) but BEFORE mutating the live arrays.
+          undoStore.peekCurrentForRedo(project.terrain, project.magnitude, project.nations, _landTileCount)
+          // Copy snapshot data into the live arrays (TypedArrays are not Immer-proxied).
+          project.terrain.set(snapshot.terrain)
+          project.magnitude.set(snapshot.magnitude)
+          buildMapTexture(project)
+          _landTileCount = snapshot.landTileCount
+          set((state) => {
+            state.project.nations = snapshot.nations.map((n) => ({ ...n }))
+            state.landTileCount = snapshot.landTileCount
+            state.renderRevision = (state.renderRevision ?? 0) + 1
+          })
+        } finally {
+          _isUndoRedoInProgress = false
+        }
       },
       redo: () => {
-        const { project } = useEditorStore.getState()
-        const undoStore = useUndoStore.getState()
-        if (!undoStore.canRedo()) return
-        // Pop redo snapshot BEFORE saving current state, so the redo stack
-        // reference is stable when we call pushToUndo.
-        const snapshot = undoStore.popRedo()
-        if (!snapshot) return
-        // Save current state to undo stack (without clearing remaining redo entries).
-        undoStore.pushToUndo(project.terrain, project.magnitude, project.nations, _landTileCount)
-        project.terrain.set(snapshot.terrain)
-        project.magnitude.set(snapshot.magnitude)
-        buildMapTexture(project)
-        _landTileCount = snapshot.landTileCount
-        set((state) => {
-          state.project.nations = snapshot.nations.map((n) => ({ ...n }))
-          state.landTileCount = snapshot.landTileCount
-          state.renderRevision = (state.renderRevision ?? 0) + 1
-        })
+        if (_isUndoRedoInProgress) return
+        _isUndoRedoInProgress = true
+        try {
+          const { project } = useEditorStore.getState()
+          const undoStore = useUndoStore.getState()
+          if (!undoStore.canRedo()) return
+          // Pop redo snapshot BEFORE saving current state, so the redo stack
+          // reference is stable when we call pushToUndo.
+          const snapshot = undoStore.popRedo()
+          if (!snapshot) return
+          // Dimension mismatch guard
+          if (
+            snapshot.terrain.length !== project.terrain.length ||
+            snapshot.magnitude.length !== project.magnitude.length
+          ) {
+            undoStore.clear()
+            return
+          }
+          // Save current state to undo stack (without clearing remaining redo entries).
+          undoStore.pushToUndo(project.terrain, project.magnitude, project.nations, _landTileCount)
+          project.terrain.set(snapshot.terrain)
+          project.magnitude.set(snapshot.magnitude)
+          buildMapTexture(project)
+          _landTileCount = snapshot.landTileCount
+          set((state) => {
+            state.project.nations = snapshot.nations.map((n) => ({ ...n }))
+            state.landTileCount = snapshot.landTileCount
+            state.renderRevision = (state.renderRevision ?? 0) + 1
+          })
+        } finally {
+          _isUndoRedoInProgress = false
+        }
       },
       setProjectName: (name) =>
         set((state) => {
@@ -558,6 +627,8 @@ export const useEditorStore = create<EditorStoreState>()(
       loadProject: (project) => {
         buildMapTexture(project)
         _landTileCount = countLandTiles(project.terrain)
+        _isPainting = false
+        _isUndoRedoInProgress = false
         useUndoStore.getState().clear()
         set((state) => {
           state.project = project
