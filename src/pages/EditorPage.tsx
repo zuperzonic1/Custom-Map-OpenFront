@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import '../App.css'
 import { buildExportBundle, buildExportPng, downloadBlob } from '../lib/exportMap'
 import { useEditorStore } from '../store/editorStore'
@@ -68,11 +69,10 @@ const COUNTRY_CODES = [
   'ZA', 'ZM', 'ZW',
 ] as const
 
-interface EditorPageProps {
-  onGoHome: () => void
-}
+export function EditorPage(): React.ReactElement {
+  const navigate = useNavigate()
+  const onGoHome = () => navigate('/')
 
-export function EditorPage({ onGoHome }: EditorPageProps): React.ReactElement {
   const projectName = useEditorStore((state) => state.project.name)
   const projectWidth = useEditorStore((state) => state.project.width)
   const projectHeight = useEditorStore((state) => state.project.height)

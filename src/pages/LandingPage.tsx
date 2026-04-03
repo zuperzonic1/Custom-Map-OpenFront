@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './LandingPage.css'
 import { useEditorStore } from '../store/editorStore'
 import { importImageAsProject, ImportError } from '../lib/importMap'
@@ -36,11 +37,10 @@ const FEATURES = [
   },
 ] as const
 
-interface LandingPageProps {
-  onEnterEditor: () => void
-}
+export function LandingPage(): React.ReactElement {
+  const navigate = useNavigate()
+  const onEnterEditor = () => navigate('/editor')
 
-export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactElement {
   return (
     <div className="landing">
       {/* ── hero ───────────────────────────────── */}
