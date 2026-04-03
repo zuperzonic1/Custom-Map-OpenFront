@@ -79,38 +79,52 @@ function NationsSection({
   nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }>
 }): React.ReactElement {
   const removeNation = useEditorStore((state) => state.removeNation)
+  const removeAllNations = useEditorStore((state) => state.removeAllNations)
 
   return (
     <div className="status-card">
-      <h3>Nations</h3>
+      <div className="nations-section-header">
+        <h3>Nations</h3>
+        {nations.length > 0 && (
+          <button
+            type="button"
+            className="nation-remove-all-btn"
+            onClick={removeAllNations}
+            title="Remove all nations"
+          >
+            Remove all
+          </button>
+        )}
+      </div>
+
       {nations.length === 0 ? (
         <p className="empty-state">No nations placed yet.</p>
       ) : (
         <ul className="nations-list">
           {nations.map((nation) => (
-          <li key={nation.id} className="nation-row">
-                <div className="nation-row-info">
-                  <img
-                    className="nation-flag"
-                    src={flagUrl(nation.countryCode || 'us')}
-                    alt={nation.countryCode || 'US'}
-                    onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
-                    onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
-                  />
-                  <div>
-                    <strong>{nation.name}</strong>
-                    <span>{nation.x}, {nation.y}</span>
-                  </div>
+            <li key={nation.id} className="nation-row">
+              <div className="nation-row-info">
+                <img
+                  className="nation-flag"
+                  src={flagUrl(nation.countryCode || 'us')}
+                  alt={nation.countryCode || 'US'}
+                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                  onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
+                />
+                <div>
+                  <strong>{nation.name}</strong>
+                  <span>{nation.x}, {nation.y}</span>
                 </div>
-                <button
-                  type="button"
-                  className="nation-remove-btn"
-                  onClick={() => removeNation(nation.id)}
-                  aria-label="Remove nation"
-                >
-                  ×
-                </button>
-              </li>
+              </div>
+              <button
+                type="button"
+                className="nation-remove-btn"
+                onClick={() => removeNation(nation.id)}
+                aria-label="Remove nation"
+              >
+                ×
+              </button>
+            </li>
           ))}
         </ul>
       )}

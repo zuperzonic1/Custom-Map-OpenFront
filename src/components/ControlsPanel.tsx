@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useEditorStore, MAX_LAND_TILES } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
 
@@ -13,6 +13,7 @@ export function ControlsPanel({
 }: ControlsPanelProps): React.ReactElement {
   const projectWidth = useEditorStore((state) => state.project.width)
   const projectHeight = useEditorStore((state) => state.project.height)
+  const tool = useEditorStore((state) => state.tool)
 
   return (
     <aside className="panel controls">
@@ -20,8 +21,8 @@ export function ControlsPanel({
 
       <ToolButtons />
 
-      <BrushSizeControl />
-      <ElevationControl />
+      {tool !== 'nation' && <BrushSizeControl />}
+      {tool !== 'nation' && <ElevationControl />}
       <NationPlacementHelp />
       <ZoomControl />
 
@@ -122,16 +123,68 @@ function ElevationControl(): React.ReactElement {
 }
 
 function NationPlacementHelp(): React.ReactElement {
+  const tool = useEditorStore((state) => state.tool)
   const pendingNationPlacement = useEditorStore((state) => state.pendingNationPlacement)
+  const autoAddNations = useEditorStore((state) => state.autoAddNations)
+  const [tab, setTab] = useState<'place' | 'auto'>('place')
+  const [countStr, setCountStr] = useState('8')
+
+  if (tool !== 'nation') return <></>
+
+  const countInvalid = countStr.trim() === '' || Number(countStr) <= 0
 
   return (
     <div className="status-card">
-      <h3>Nation placement</h3>
-      <p className="empty-state">
-        {pendingNationPlacement
-          ? 'Nation dialog is open. Confirm or cancel it in the center of the screen.'
-          : 'Select Nation, then click a land tile to open the nation dialog.'}
-      </p>
+      <div className="nation-tool-tabs">
+        <button
+          type="button"
+          className={tab === 'place' ? 'active' : ''}
+          onClick={() => setTab('place')}
+        >
+          Place
+        </button>
+        <button
+          type="button"
+          className={tab === 'auto' ? 'active' : ''}
+          onClick={() => setTab('auto')}
+        >
+          Auto
+        </button>
+      </div>
+
+      {tab === 'place' && (
+        <p className="empty-state" style={{ marginTop: 10 }}>
+          {pendingNationPlacement
+            ? 'Nation dialog is open — confirm or cancel it.'
+            : 'Click a land tile to open the placement dialog.'}
+        </p>
+      )}
+
+      {tab === 'auto' && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <label className="field">
+            <span>Number of nations</span>
+            <input
+              type="number"
+              min={0}
+              max={500}
+              value={countStr}
+              onChange={(e) => setCountStr(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary"
+            disabled={countInvalid}
+            onClick={() => {
+              const n = Math.min(500, Math.max(1, Math.floor(Number(countStr))))
+              autoAddNations(n)
+            }}
+          >
+            Place nations
+          </button>
+        </div>
+      )}
     </div>
   )
 }

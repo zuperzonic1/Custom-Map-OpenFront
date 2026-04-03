@@ -247,6 +247,18 @@ export function EditorPage(): React.ReactElement {
                     onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
                     onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
                   />
+                  <button
+                    type="button"
+                    className="secondary name-random-btn"
+                    onClick={() =>
+                      setNationCountryCode(
+                        COUNTRY_CODES[Math.floor(Math.random() * COUNTRY_CODES.length)],
+                      )
+                    }
+                    title="Random flag"
+                  >
+                    🎲
+                  </button>
                   <select
                     value={nationCountryCode}
                     onChange={(event) => setNationCountryCode(event.target.value)}
@@ -273,6 +285,7 @@ export function EditorPage(): React.ReactElement {
           </div>
         </div>
       )}
+
     </div>
   )
 }

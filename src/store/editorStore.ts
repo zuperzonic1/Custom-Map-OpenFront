@@ -148,6 +148,8 @@ type EditorStoreState = {
   confirmNationPlacement: () => void
   cancelNationPlacement: () => void
   removeNation: (nationId: string) => void
+  removeAllNations: () => void
+  autoAddNations: (count: number) => void
   setProjectName: (name: string) => void
   setProjectMetadata: (key: keyof MapMetadata, value: string) => void
   loadProject: (project: MapProject) => void
@@ -289,6 +291,16 @@ const deferredStorage = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any
 
+// ── Auto-add nation helpers ───────────────────────────────────────────────────
+
+const _ADJ = 'Mighty,Chunky,Wobbly,Spicy,Soggy,Turbo,Legendary,Fluffy,Cosmic,Sneaky,Grumpy,Crispy,Fancy,Funky,Grand,Mystical,Radical,Saucy,Supreme,Wacky,Rusty,Glamorous,Cursed,Ancient,Electric,Feral,Hollow,Infinite,Jolly,Knightly'.split(',')
+const _NNS = 'Penguins,Narwhals,Potatoes,Wombats,Ducks,Llamas,Muffins,Pickles,Bananas,Noodles,Beavers,Donkeys,Rascals,Yetis,Goblins,Badgers,Toads,Vikings,Wizards,Ninjas,Sloths,Hedgehogs,Axolotls,Capybaras,Platypuses,Corgis,Ferrets,Salamanders,Krakens,Parrots'.split(',')
+const _FLG = 'AD,AE,AF,AG,AL,AM,AR,AT,AU,AZ,BA,BD,BE,BG,BO,BR,BY,CA,CH,CL,CN,CO,CZ,DE,DK,EG,ES,ET,FI,FR,GA,GB,GH,GR,GT,HN,HR,HU,ID,IE,IL,IN,IQ,IR,IT,JP,KE,KR,KZ,LA,LB,LY,MA,MX,MY,NG,NL,NO,NZ,PE,PH,PK,PL,PT,RO,RS,RU,SA,SE,SG,SK,SN,SO,SR,SY,TH,TN,TR,TZ,UA,UG,US,UY,UZ,VE,VN,YE,ZA,ZM,ZW'.split(',')
+
+function _rnd<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
+function randomGoofyName(): string { return `${_rnd(_ADJ)} ${_rnd(_NNS)}` }
+function randomFlag(): string { return _rnd(_FLG) }
+
 export const useEditorStore = create<EditorStoreState>()(
   persist(
     immer((set) => ({
@@ -396,6 +408,60 @@ export const useEditorStore = create<EditorStoreState>()(
       removeNation: (nationId) =>
         set((state) => {
           state.project.nations = state.project.nations.filter((nation) => nation.id !== nationId)
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        }),
+      removeAllNations: () =>
+        set((state) => {
+          state.project.nations = []
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        }),
+      autoAddNations: (count) =>
+        set((state) => {
+          const { terrain, width } = state.project
+          // Collect land tile flat indices
+          const land: number[] = []
+          for (let i = 0; i < terrain.length; i++) {
+            if (terrain[i] === 1) land.push(i)
+          }
+          if (land.length === 0 || count <= 0) return
+          const actual = Math.min(count, land.length)
+          const minDist = Math.max(1, Math.sqrt(land.length / actual) * 0.6)
+          const placed: Array<{ x: number; y: number }> = []
+          let tries = 0
+          const maxTries = actual * 30
+          while (placed.length < actual && tries < maxTries) {
+            tries++
+            const idx = land[Math.floor(Math.random() * land.length)]
+            const cx = idx % width
+            const cy = Math.floor(idx / width)
+            let ok = true
+            for (const p of placed) {
+              const dx = p.x - cx; const dy = p.y - cy
+              if (dx * dx + dy * dy < minDist * minDist) { ok = false; break }
+            }
+            if (ok) placed.push({ x: cx, y: cy })
+          }
+          // Fill remainder without distance constraint if needed
+          if (placed.length < actual) {
+            for (let i = land.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [land[i], land[j]] = [land[j], land[i]]
+            }
+            for (const idx of land) {
+              if (placed.length >= actual) break
+              const cx = idx % width; const cy = Math.floor(idx / width)
+              if (!placed.some((p) => p.x === cx && p.y === cy)) placed.push({ x: cx, y: cy })
+            }
+          }
+          for (const pos of placed) {
+            state.project.nations.push({
+              id: createNationId(),
+              name: randomGoofyName(),
+              countryCode: randomFlag(),
+              x: pos.x,
+              y: pos.y,
+            })
+          }
           state.renderRevision = (state.renderRevision ?? 0) + 1
         }),
       setProjectName: (name) =>
