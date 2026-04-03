@@ -75,9 +75,9 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
       </section>
 
       <section className="landing-guide">
-        <h2>Enabling Maps In-Game</h2>
+        <h2>How to Use Your Map In-Game</h2>
         <p>
-          After generating map files, enable the map in-game. See the{' '}
+          Follow these steps to create, export, and enable your custom map in OpenFront. See the{' '}
           <a
             href="https://openfrontio-openfrontio.mintlify.app/map-generator/usage"
             target="_blank"
@@ -88,6 +88,23 @@ export function LandingPage({ onEnterEditor }: LandingPageProps): React.ReactEle
           for the full guide.
         </p>
         <ol>
+          <li>
+            <strong>Create or Import Your Map</strong>
+            <span>
+              Start with a blank canvas (choose a size and click <em>Open Editor</em>) or import an
+              existing image to use as a base. Paint terrain, set elevations, place nation spawn
+              points, then click <strong>Export → Map Files</strong> to download your map as a{' '}
+              <code>.zip</code>.
+            </span>
+          </li>
+          <li>
+            <strong>Add Map Files to the Game</strong>
+            <span>
+              In your OpenFrontIO repository, create a new folder at{' '}
+              <code>resources/maps/&lt;YourMapName&gt;/</code>. Unzip the downloaded{' '}
+              <code>.zip</code> and move all the files into that folder.
+            </span>
+          </li>
           <li>
             <strong>Update Game Types</strong>
             <span>Add to <code>GameMapType</code> and <code>mapCategories</code> in <code>src/core/game/Game.ts</code></span>
