@@ -389,6 +389,67 @@ export function usePixiMapRenderer(
   return { isReady, fps, canvasRef }
 }
 
+// ─── Export Info Overlay component ────────────────────────────────────────────
+
+function ExportInfoOverlay() {
+  const [showTooltip, setShowTooltip] = useState(false)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const infoIconRef = useRef<HTMLButtonElement | null>(null)
+
+  const handleInfoIconMouseEnter = () => {
+    const icon = infoIconRef.current
+    if (!icon) return
+
+    const rect = icon.getBoundingClientRect()
+    setTooltipPos({
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 8,
+    })
+    setShowTooltip(true)
+  }
+
+  const handleInfoIconMouseLeave = () => {
+    setShowTooltip(false)
+  }
+
+  return (
+    <>
+      <div className="verify-map-overlay">
+        <button
+          ref={infoIconRef}
+          className="verify-info-icon"
+          onMouseEnter={handleInfoIconMouseEnter}
+          onMouseLeave={handleInfoIconMouseLeave}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Information about export cleanup"
+        >
+          ⓘ
+        </button>
+      </div>
+
+      {showTooltip && (
+        <div
+          className="verify-tooltip"
+          style={{
+            left: `${tooltipPos.x}px`,
+            top: `${tooltipPos.y}px`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          <strong>Export Cleanup</strong>
+          <p style={{ margin: '8px 0 8px 0', fontSize: '12px', lineHeight: '1.4' }}>
+            When exporting, the following are automatically removed:
+          </p>
+          <ul>
+            <li>Land masses smaller than 30 tiles</li>
+            <li>Water bodies smaller than 200 tiles</li>
+          </ul>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ─── Canvas component ─────────────────────────────────────────────────────────
 
 export function PixiMapEditor() {
@@ -677,6 +738,8 @@ export function PixiMapEditor() {
       <div className="fps-counter" aria-label="Frames per second">
         FPS {fps}
       </div>
+
+      <ExportInfoOverlay />
     </div>
   )
 }

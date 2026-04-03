@@ -287,7 +287,7 @@ button:active,
 .fps-counter {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   z-index: 2;
   padding: 6px 10px;
   border: 1px solid var(--line);
@@ -298,6 +298,69 @@ button:active,
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   box-shadow: var(--shadow);
+}
+
+.verify-map-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
+.verify-info-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(2, 6, 23, 0.78);
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  cursor: help;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.verify-info-icon:hover {
+  background: rgba(15, 23, 42, 0.9);
+  color: var(--text-strong);
+}
+
+.verify-tooltip {
+  position: fixed;
+  z-index: 100;
+  padding: 12px 14px;
+  max-width: 280px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.verify-tooltip strong {
+  color: var(--text-strong);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.verify-tooltip ul {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.verify-tooltip li {
+  margin-bottom: 4px;
 }
 
 .minimap-frame {
