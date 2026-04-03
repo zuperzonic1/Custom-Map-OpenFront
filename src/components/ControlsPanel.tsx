@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useEditorStore, MAX_LAND_TILES } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
 
@@ -17,7 +17,10 @@ export function ControlsPanel({
 
   return (
     <aside className="panel controls">
-      <h2>Tools</h2>
+      <div className="tools-header">
+        <h2>Tools</h2>
+        <ShortcutsButton />
+      </div>
 
       <ToolButtons />
 
@@ -264,6 +267,89 @@ function MapSizePanel({
       >
         New blank map
       </button>
+    </div>
+  )
+}
+
+const SHORTCUTS = [
+  { keys: 'Space + Drag', action: 'Pan the map' },
+  { keys: 'Scroll Wheel', action: 'Zoom in / out' },
+  { keys: 'Ctrl + Z', action: 'Undo' },
+  { keys: 'Ctrl + Y  /  Ctrl + Shift + Z', action: 'Redo' },
+]
+
+function ShortcutsButton(): React.ReactElement {
+  const [open, setOpen] = useState(false)
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  const close = useCallback(() => setOpen(false), [])
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPopupPos({ top: rect.bottom + 8, left: rect.left })
+    }
+    setOpen((v) => !v)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onPointerDown(e: PointerEvent) {
+      if (
+        popupRef.current &&
+        !popupRef.current.contains(e.target as Node) &&
+        btnRef.current &&
+        !btnRef.current.contains(e.target as Node)
+      ) {
+        close()
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open, close])
+
+  return (
+    <div className="shortcuts-wrapper">
+      <button
+        ref={btnRef}
+        type="button"
+        className="shortcuts-btn"
+        aria-label="Keyboard shortcuts"
+        title="Keyboard shortcuts"
+        onClick={handleToggle}
+      >
+        ⌨
+      </button>
+      {open && popupPos && (
+        <div
+          ref={popupRef}
+          className="shortcuts-popup"
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          style={{ top: popupPos.top, left: popupPos.left }}
+        >
+          <p className="shortcuts-heading">Keyboard Shortcuts</p>
+          <table className="shortcuts-table">
+            <tbody>
+              {SHORTCUTS.map(({ keys, action }) => (
+                <tr key={keys}>
+                  <td><kbd>{keys}</kbd></td>
+                  <td>{action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

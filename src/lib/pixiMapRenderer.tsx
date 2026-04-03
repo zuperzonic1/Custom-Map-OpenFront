@@ -554,6 +554,34 @@ export function PixiMapEditor() {
         event.preventDefault()
         isSpacePressedRef.current = true
       }
+
+      // Undo: Ctrl+Z
+      if (event.ctrlKey && event.code === 'KeyZ' && !event.shiftKey && !isEditableTarget) {
+        event.preventDefault()
+        // Commit any in-flight stroke first so the pre-stroke snapshot on the
+        // undo stack is the correct restore target, then clear the drawing flag
+        // so continued pointer moves don't overwrite the just-restored state.
+        if (isDrawingRef.current) {
+          useEditorStore.getState().commitPaint()
+          isDrawingRef.current = false
+        }
+        useEditorStore.getState().undo()
+      }
+
+      // Redo: Ctrl+Y or Ctrl+Shift+Z
+      if (
+        !isEditableTarget &&
+        ((event.ctrlKey && event.code === 'KeyY') ||
+          (event.ctrlKey && event.shiftKey && event.code === 'KeyZ'))
+      ) {
+        event.preventDefault()
+        // Same guard as undo — commit any active stroke before redoing.
+        if (isDrawingRef.current) {
+          useEditorStore.getState().commitPaint()
+          isDrawingRef.current = false
+        }
+        useEditorStore.getState().redo()
+      }
     }
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -563,6 +591,12 @@ export function PixiMapEditor() {
     }
 
     const stopInteraction = () => {
+      // Commit any in-flight stroke when the pointer is released anywhere on
+      // the page (covers releasing outside the canvas element).
+      // commitPaint() is idempotent — no-op if _isPainting is already false.
+      if (isDrawingRef.current) {
+        useEditorStore.getState().commitPaint()
+      }
       isDrawingRef.current = false
       pointerSequenceActiveRef.current = false
     }
@@ -676,6 +710,7 @@ export function PixiMapEditor() {
     }
 
     isDrawingRef.current = true
+    useEditorStore.getState().beginPaint()
     paintTilesDirect(tile.x, tile.y)
   }
 
@@ -708,6 +743,14 @@ export function PixiMapEditor() {
   }
 
   const handleMouseLeave = () => {
+    // Commit an active stroke if the cursor exits the canvas. With pointer
+    // capture the container still receives pointerup, but mouseleave fires
+    // before that and previously cleared isDrawingRef without committing,
+    // causing the stroke to be silently abandoned.
+    // commitPaint() is idempotent — no-op if _isPainting is already false.
+    if (isDrawingRef.current) {
+      useEditorStore.getState().commitPaint()
+    }
     isDrawingRef.current = false
     pointerSequenceActiveRef.current = false
   }

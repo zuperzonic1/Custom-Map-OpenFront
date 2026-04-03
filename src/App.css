@@ -690,6 +690,90 @@ button:active,
   gap: 12px;
 }
 
+.tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tools-header h2 {
+  margin: 0;
+}
+
+.shortcuts-wrapper {
+  position: relative;
+}
+
+.shortcuts-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1;
+  color: #94a3b8;
+  background: transparent;
+}
+
+.shortcuts-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-strong);
+}
+
+.shortcuts-popup {
+  position: fixed;
+  z-index: 9999;
+  min-width: 320px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.97);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+}
+
+.shortcuts-heading {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+
+.shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.shortcuts-table td {
+  padding: 6px 0;
+  font-size: 13px;
+  color: #94a3b8;
+  vertical-align: middle;
+}
+
+.shortcuts-table td:first-child {
+  padding-right: 16px;
+  white-space: nowrap;
+}
+
+.shortcuts-table kbd {
+  display: inline-block;
+  padding: 3px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.6);
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 1200px) {
   .workspace {
     grid-template-columns: 260px minmax(0, 1fr);

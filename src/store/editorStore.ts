@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import { persist } from 'zustand/middleware'
 import { buildMapTexture, updateMapPixels } from '../lib/mapTexture'
 import { useViewportStore } from './viewportStore'
+import { useUndoStore } from './undoStore'
 
 export const MAX_LAND_TILES = 3_000_000
 
@@ -11,6 +12,13 @@ export const MAX_LAND_TILES = 3_000_000
  * (hot path) and synced to the Zustand store on commitPaint / project load.
  */
 let _landTileCount = 0
+
+/**
+ * True while a paint stroke is in-flight (between beginPaint and commitPaint).
+ * Guards against double-commits and allows undo/redo to safely auto-commit
+ * an active stroke before executing.
+ */
+let _isPainting = false
 
 function countLandTiles(terrain: Uint8Array): number {
   let n = 0
@@ -143,6 +151,7 @@ type EditorStoreState = {
   setNationName: (name: string) => void
   setNationCountryCode: (countryCode: string) => void
   paintAt: (tileX: number, tileY: number) => void
+  beginPaint: () => void
   commitPaint: () => void
   addNationAt: (tileX: number, tileY: number) => void
   confirmNationPlacement: () => void
@@ -150,6 +159,8 @@ type EditorStoreState = {
   removeNation: (nationId: string) => void
   removeAllNations: () => void
   autoAddNations: (count: number) => void
+  undo: () => void
+  redo: () => void
   setProjectName: (name: string) => void
   setProjectMetadata: (key: keyof MapMetadata, value: string) => void
   loadProject: (project: MapProject) => void
@@ -354,11 +365,25 @@ export const useEditorStore = create<EditorStoreState>()(
       paintAt: (tileX, tileY) => {
         paintTilesDirect(tileX, tileY)
       },
-      commitPaint: () =>
+      beginPaint: () => {
+        // Snapshot the PRE-stroke state so undo can restore it.
+        // Called from handlePointerDown BEFORE any paintTilesDirect calls.
+        // Use _landTileCount (module-level, always current) not the store's
+        // landTileCount which may be stale if a prior commit was missed.
+        _isPainting = true
+        const { project } = useEditorStore.getState()
+        useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
+      },
+      commitPaint: () => {
+        // Guard: no-op if no stroke is in-flight (prevents double-commits from
+        // handleMouseLeave + handlePointerUp firing in quick succession).
+        if (!_isPainting) return
+        _isPainting = false
         set((state) => {
           state.landTileCount = _landTileCount
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
+        })
+      },
       addNationAt: (tileX, tileY) =>
         set((state) => {
           const { terrain, width, height } = state.project
@@ -374,23 +399,29 @@ export const useEditorStore = create<EditorStoreState>()(
             y: tileY,
           }
         }),
-      confirmNationPlacement: () =>
+      confirmNationPlacement: () => {
+        // Capture snapshot data OUTSIDE the Immer producer to avoid passing
+        // draft proxies to cloneSnapshot, and to keep side-effects out of set().
+        const currentState = useEditorStore.getState()
+        const pending = currentState.pendingNationPlacement
+        if (!pending) return
+        const { project } = currentState
+        const { terrain, width, height } = project
+
+        if (
+          pending.x < 0 || pending.x >= width ||
+          pending.y < 0 || pending.y >= height ||
+          terrain[pending.y * width + pending.x] !== 1
+        ) {
+          set((state) => { state.pendingNationPlacement = null })
+          return
+        }
+
+        // Push snapshot before mutation, using real _landTileCount.
+        useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
+
         set((state) => {
-          const pending = state.pendingNationPlacement
-          if (!pending) return
-
-          const { terrain, width, height } = state.project
-          if (pending.x < 0 || pending.x >= width || pending.y < 0 || pending.y >= height) {
-            state.pendingNationPlacement = null
-            return
-          }
-          if (terrain[pending.y * width + pending.x] !== 1) {
-            state.pendingNationPlacement = null
-            return
-          }
-
           const label = state.nationName.trim() || `Spawn ${state.project.nations.length + 1}`
-
           state.project.nations.push({
             id: createNationId(),
             name: label,
@@ -400,22 +431,31 @@ export const useEditorStore = create<EditorStoreState>()(
           })
           state.pendingNationPlacement = null
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
+        })
+      },
       cancelNationPlacement: () =>
         set((state) => {
           state.pendingNationPlacement = null
         }),
-      removeNation: (nationId) =>
+      removeNation: (nationId) => {
+        const { project } = useEditorStore.getState()
+        useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
         set((state) => {
           state.project.nations = state.project.nations.filter((nation) => nation.id !== nationId)
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
-      removeAllNations: () =>
+        })
+      },
+      removeAllNations: () => {
+        const { project } = useEditorStore.getState()
+        useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
         set((state) => {
           state.project.nations = []
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
-      autoAddNations: (count) =>
+        })
+      },
+      autoAddNations: (count) => {
+        const { project } = useEditorStore.getState()
+        useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
         set((state) => {
           const { terrain, width } = state.project
           // Collect land tile flat indices
@@ -463,7 +503,50 @@ export const useEditorStore = create<EditorStoreState>()(
             })
           }
           state.renderRevision = (state.renderRevision ?? 0) + 1
-        }),
+        })
+      },
+      undo: () => {
+        // commitPaint() is called by the keyboard/button handler before invoking
+        // undo(), so _isPainting is always false here. _landTileCount is the
+        // authoritative land count (store's landTileCount may lag one tick).
+        const { project } = useEditorStore.getState()
+        const undoStore = useUndoStore.getState()
+        if (!undoStore.canUndo()) return
+        // Save current state to redo stack BEFORE popping undo.
+        undoStore.peekCurrentForRedo(project.terrain, project.magnitude, project.nations, _landTileCount)
+        const snapshot = undoStore.popUndo()
+        if (!snapshot) return
+        // Copy snapshot data into the live arrays (TypedArrays are not Immer-proxied).
+        project.terrain.set(snapshot.terrain)
+        project.magnitude.set(snapshot.magnitude)
+        buildMapTexture(project)
+        _landTileCount = snapshot.landTileCount
+        set((state) => {
+          state.project.nations = snapshot.nations.map((n) => ({ ...n }))
+          state.landTileCount = snapshot.landTileCount
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        })
+      },
+      redo: () => {
+        const { project } = useEditorStore.getState()
+        const undoStore = useUndoStore.getState()
+        if (!undoStore.canRedo()) return
+        // Pop redo snapshot BEFORE saving current state, so the redo stack
+        // reference is stable when we call pushToUndo.
+        const snapshot = undoStore.popRedo()
+        if (!snapshot) return
+        // Save current state to undo stack (without clearing remaining redo entries).
+        undoStore.pushToUndo(project.terrain, project.magnitude, project.nations, _landTileCount)
+        project.terrain.set(snapshot.terrain)
+        project.magnitude.set(snapshot.magnitude)
+        buildMapTexture(project)
+        _landTileCount = snapshot.landTileCount
+        set((state) => {
+          state.project.nations = snapshot.nations.map((n) => ({ ...n }))
+          state.landTileCount = snapshot.landTileCount
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        })
+      },
       setProjectName: (name) =>
         set((state) => {
           state.project.name = name
@@ -475,6 +558,7 @@ export const useEditorStore = create<EditorStoreState>()(
       loadProject: (project) => {
         buildMapTexture(project)
         _landTileCount = countLandTiles(project.terrain)
+        useUndoStore.getState().clear()
         set((state) => {
           state.project = project
           state.landTileCount = _landTileCount
