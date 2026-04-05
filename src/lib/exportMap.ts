@@ -445,8 +445,9 @@ export async function buildExportBundle(project: MapProject): Promise<ExportBund
   }
 }
 
-function magnitudeToExportBlue(magnitude: number): number {
-  const m = Math.max(0, Math.min(30, Math.round(magnitude)))
+function magnitudeToExportBlue(editorMag: number): number {
+  // Convert editor magnitude (0-255) → game magnitude (0-30) first
+  const m = Math.max(0, Math.min(30, Math.round((editorMag / 255) * 30)))
 
   if (m <= 9) {
     return 140 + Math.round((m / 9) * 18)

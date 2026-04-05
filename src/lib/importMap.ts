@@ -21,25 +21,24 @@ function pixelToTerrain(
   // Water: specific key colour (blue = 106)
   if (b === 106) return { terrain: 0, magnitude: 0 }
 
-  // Land — elevation derived from blue channel
+  // Land — decode blue channel → game magnitude (0-30) → editor magnitude (0-255)
+  let gameMag: number
   if (b < 140) {
-    // Plains — minimum magnitude
-    return { terrain: 1, magnitude: 0 }
+    gameMag = 0
+  } else if (b <= 158) {
+    // Plains — game magnitude 0-9
+    gameMag = Math.round(((b - 140) / 18) * 9)
+  } else if (b <= 178) {
+    // Highland — game magnitude 10-19
+    gameMag = 10 + Math.round(((b - 159) / 19) * 9)
+  } else if (b <= 200) {
+    // Mountain — game magnitude 20-30
+    gameMag = 20 + Math.round(((b - 179) / 21) * 10)
+  } else {
+    gameMag = 30
   }
-  if (b <= 158) {
-    // Plains — magnitude 0-9
-    return { terrain: 1, magnitude: Math.round(((b - 140) / 18) * 9) }
-  }
-  if (b <= 178) {
-    // Highland — magnitude 10-19
-    return { terrain: 1, magnitude: 10 + Math.round(((b - 159) / 19) * 9) }
-  }
-  if (b <= 200) {
-    // Mountain — magnitude 20-30
-    return { terrain: 1, magnitude: 20 + Math.round(((b - 179) / 21) * 10) }
-  }
-  // b > 200: Mountain, clamped to maximum magnitude
-  return { terrain: 1, magnitude: 30 }
+  // Convert game magnitude (0-30) → editor magnitude (0-255)
+  return { terrain: 1, magnitude: Math.round((gameMag / 30) * 255) }
 }
 
 // ---------------------------------------------------------------------------
