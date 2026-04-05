@@ -19,6 +19,11 @@ const WATER_R = 0x0b
 const WATER_G = 0x4f
 const WATER_B = 0x6c
 
+// Editor magnitude (0-255) → game magnitude (0-30)
+function toGameMag(m: number): number {
+  return Math.round((m / 255) * 30)
+}
+
 // ─── Shared buffer ────────────────────────────────────────────────────────────
 
 type MapLike = {
@@ -56,13 +61,37 @@ export function consumeTextureUpload(): boolean {
 
 // ─── Pixel writing ────────────────────────────────────────────────────────────
 
-/** Write one tile's colour into a flat Uint8ClampedArray RGBA buffer. */
+/**
+ * Write one tile's colour into a flat Uint8ClampedArray RGBA buffer.
+ *
+ * Land colours mirror OpenFront's PastelTheme.ts (light theme):
+ *   Plains    (gameMag  0– 9): rgb(190, 220-2*mag, 138)
+ *   Highland  (gameMag 10–19): rgb(200+2*mag, 183+2*mag, 138+2*mag)
+ *   Mountain  (gameMag 20–30): rgb(230+mag/2, 230+mag/2, 230+mag/2)
+ */
 function writePixel(data: Uint8ClampedArray, i: number, t: number, m: number): void {
   const px = i << 2 // i * 4
   if (t === 1) {
-    data[px]     = m
-    data[px + 1] = m + 30 > 255 ? 255 : m + 30
-    data[px + 2] = m + 10 > 255 ? 255 : m + 10
+    const mag = toGameMag(m)
+    let r: number, g: number, b: number
+    if (mag < 10) {
+      // Plains
+      r = 190
+      g = 220 - 2 * mag
+      b = 138
+    } else if (mag < 20) {
+      // Highland
+      r = Math.min(255, 200 + 2 * mag)
+      g = Math.min(255, 183 + 2 * mag)
+      b = Math.min(255, 138 + 2 * mag)
+    } else {
+      // Mountain
+      const v = Math.min(255, Math.floor(230 + mag / 2))
+      r = v; g = v; b = v
+    }
+    data[px]     = r
+    data[px + 1] = g
+    data[px + 2] = b
     data[px + 3] = 255
   } else {
     data[px]     = WATER_R

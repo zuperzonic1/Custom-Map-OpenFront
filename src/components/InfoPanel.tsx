@@ -137,6 +137,11 @@ const WATER_R = 0x0b
 const WATER_G = 0x4f
 const WATER_B = 0x6c
 
+// Editor magnitude (0-255) → game magnitude (0-30)
+function toGameMag(m: number): number {
+  return Math.round((m / 255) * 30)
+}
+
 /** Must stay in sync with BASE_TILE_SIZE in pixiMapRenderer.tsx */
 const TILE_SIZE = 14
 
@@ -190,9 +195,21 @@ function Minimap({
             const m = project.magnitude[srcIdx] ?? 0
             const dstIdx = (py * renderW + px) * 4
             if (t === 1) {
-              data[dstIdx]     = m
-              data[dstIdx + 1] = m + 30 > 255 ? 255 : m + 30
-              data[dstIdx + 2] = m + 10 > 255 ? 255 : m + 10
+              const mag = toGameMag(m)
+              let r: number, g: number, b: number
+              if (mag < 10) {
+                r = 190; g = 220 - 2 * mag; b = 138
+              } else if (mag < 20) {
+                r = Math.min(255, 200 + 2 * mag)
+                g = Math.min(255, 183 + 2 * mag)
+                b = Math.min(255, 138 + 2 * mag)
+              } else {
+                const v = Math.min(255, Math.floor(230 + mag / 2))
+                r = v; g = v; b = v
+              }
+              data[dstIdx]     = r
+              data[dstIdx + 1] = g
+              data[dstIdx + 2] = b
               data[dstIdx + 3] = 255
             } else {
               data[dstIdx]     = WATER_R
