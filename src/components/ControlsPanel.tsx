@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { useEditorStore, MAX_LAND_TILES } from '../store/editorStore'
+import { useEditorStore } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
 
 /** Inline eyedropper/pipette SVG icon. */
@@ -7,8 +7,8 @@ function EyedropperIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="13"
-      height="13"
+      width="11"
+      height="11"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -25,284 +25,210 @@ function EyedropperIcon() {
 }
 
 export interface ControlsPanelProps {
+  onGoHome: () => void
   onResetMap?: () => void
-  onCreateBlankMap: (width: number, height: number) => void
 }
 
 export function ControlsPanel({
+  onGoHome,
   onResetMap,
-  onCreateBlankMap,
 }: ControlsPanelProps): React.ReactElement {
-  const projectWidth = useEditorStore((state) => state.project.width)
-  const projectHeight = useEditorStore((state) => state.project.height)
-  const tool = useEditorStore((state) => state.tool)
-
-  return (
-    <aside className="panel controls">
-      <div className="tools-header">
-        <h2>Tools</h2>
-        <ShortcutsButton />
-      </div>
-
-      <ToolButtons />
-
-      {tool !== 'nation' && <BrushSizeControl />}
-      {tool !== 'nation' && <ElevationControl />}
-      <NationPlacementHelp />
-      <ZoomControl />
-
-      <MapSizePanel
-        width={projectWidth}
-        height={projectHeight}
-        onCreateBlankMap={onCreateBlankMap}
-      />
-
-      <ProjectInfoPanel
-        width={projectWidth}
-        height={projectHeight}
-      />
-
-      {onResetMap && (
-        <div className="status-card">
-          <button type="button" className="secondary" onClick={onResetMap}>
-            Reset map
-          </button>
-        </div>
-      )}
-    </aside>
-  )
-}
-
-function ToolButtons(): React.ReactElement {
   const tool = useEditorStore((state) => state.tool)
   const setTool = useEditorStore((state) => state.setTool)
-
-  return (
-    <div className="button-group tool-grid">
-      <ToolButton label="Land" active={tool === 'land'} onClick={() => setTool('land')} />
-      <ToolButton label="Water" active={tool === 'water'} onClick={() => setTool('water')} />
-      <ToolButton label="Nation" active={tool === 'nation'} onClick={() => setTool('nation')} />
-    </div>
-  )
-}
-
-function ToolButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      className={active ? 'active' : ''}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  )
-}
-
-function BrushSizeControl(): React.ReactElement {
   const brushSize = useEditorStore((state) => state.brushSize)
   const setBrushSize = useEditorStore((state) => state.setBrushSize)
-
-  return (
-    <label className="field">
-      <span>Brush size</span>
-      <input
-        type="range"
-        min="1"
-        max="50"
-        step="1"
-        value={brushSize}
-        onInput={(event) => setBrushSize(Number(event.currentTarget.value))}
-        onChange={(event) => setBrushSize(Number(event.currentTarget.value))}
-      />
-      <strong>{brushSize}</strong>
-    </label>
-  )
-}
-
-function ElevationControl(): React.ReactElement {
   const elevationValue = useEditorStore((state) => state.elevationValue)
   const setElevationValue = useEditorStore((state) => state.setElevationValue)
   const isSampling = useEditorStore((state) => state.isSampling)
   const setIsSampling = useEditorStore((state) => state.setIsSampling)
-
-  return (
-    <label className="field">
-      <span>Land elevation</span>
-      <input
-        type="range"
-        min="0"
-        max="255"
-        value={elevationValue}
-        onInput={(event) => setElevationValue(Number(event.currentTarget.value))}
-        onChange={(event) => setElevationValue(Number(event.currentTarget.value))}
-      />
-      <div className="elevation-value-row">
-        <strong>{elevationValue}</strong>
-        <button
-          type="button"
-          className={`sampler-btn${isSampling ? ' active' : ''}`}
-          title="Sample elevation from map (or hold Alt + click on canvas)"
-          aria-label="Sample elevation from map"
-          onClick={() => setIsSampling(!isSampling)}
-        >
-          <EyedropperIcon />
-        </button>
-      </div>
-    </label>
-  )
-}
-
-function NationPlacementHelp(): React.ReactElement {
-  const tool = useEditorStore((state) => state.tool)
-  const pendingNationPlacement = useEditorStore((state) => state.pendingNationPlacement)
   const autoAddNations = useEditorStore((state) => state.autoAddNations)
-  const [tab, setTab] = useState<'place' | 'auto'>('place')
-  const [countStr, setCountStr] = useState('8')
-
-  if (tool !== 'nation') return <></>
-
-  const countInvalid = countStr.trim() === '' || Number(countStr) <= 0
-
-  return (
-    <div className="status-card">
-      <div className="nation-tool-tabs">
-        <button
-          type="button"
-          className={tab === 'place' ? 'active' : ''}
-          onClick={() => setTab('place')}
-        >
-          Place
-        </button>
-        <button
-          type="button"
-          className={tab === 'auto' ? 'active' : ''}
-          onClick={() => setTab('auto')}
-        >
-          Auto
-        </button>
-      </div>
-
-      {tab === 'place' && (
-        <p className="empty-state" style={{ marginTop: 10 }}>
-          {pendingNationPlacement
-            ? 'Nation dialog is open — confirm or cancel it.'
-            : 'Click a land tile to open the placement dialog.'}
-        </p>
-      )}
-
-      {tab === 'auto' && (
-        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <label className="field">
-            <span>Number of nations</span>
-            <input
-              type="number"
-              min={0}
-              max={500}
-              value={countStr}
-              onChange={(e) => setCountStr(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="primary"
-            disabled={countInvalid}
-            onClick={() => {
-              const n = Math.min(500, Math.max(1, Math.floor(Number(countStr))))
-              autoAddNations(n)
-            }}
-          >
-            Place nations
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ZoomControl(): React.ReactElement {
   const zoom = useViewportStore((state) => state.zoom)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [nationCountStr, setNationCountStr] = React.useState('8')
+  const [nationUseFlags, setNationUseFlags] = React.useState(true)
 
-  const handleZoomSliderChange = (value: number): void => {
+  const handleZoomChange = (value: number): void => {
     const clamped = Math.max(0.001, Math.min(6, value))
     useViewportStore.setState({ zoom: clamped })
   }
 
+  // Auto-cancel reset confirmation after 4 seconds
+  useEffect(() => {
+    if (!confirmReset) return
+    const timer = setTimeout(() => setConfirmReset(false), 4000)
+    return () => clearTimeout(timer)
+  }, [confirmReset])
+
+  const handleReset = () => {
+    if (!confirmReset) {
+      setConfirmReset(true)
+      return
+    }
+    setConfirmReset(false)
+    onResetMap?.()
+  }
+
+  // Cancel confirmation on Escape key
+  useEffect(() => {
+    if (!confirmReset) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setConfirmReset(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [confirmReset])
+
+  // Cancel confirmation if user clicks outside the button area
+  useEffect(() => {
+    if (!confirmReset) return
+    const handler = (e: PointerEvent) => {
+      const btn = document.querySelector('.toolbar-reset')
+      if (btn && !btn.contains(e.target as Node)) {
+        setConfirmReset(false)
+      }
+    }
+    // Delay so the click that triggered confirm doesn't also cancel it
+    setTimeout(() => window.addEventListener('pointerdown', handler), 0)
+    return () => window.removeEventListener('pointerdown', handler)
+  }, [confirmReset])
+
   return (
-    <label className="field">
-      <span>Zoom</span>
-      <input
-        type="range"
-        min="0.001"
-        max="6"
-        step="0.001"
-        value={zoom}
-        onInput={(event) => handleZoomSliderChange(Number(event.currentTarget.value))}
-        onChange={(event) => handleZoomSliderChange(Number(event.currentTarget.value))}
-      />
-      <strong>{zoom.toFixed(2)}x</strong>
-    </label>
-  )
-}
-
-function MapSizePanel({
-  width,
-  height,
-  onCreateBlankMap,
-}: {
-  width: number
-  height: number
-  onCreateBlankMap: (w: number, h: number) => void
-}): React.ReactElement {
-  const [nextWidth, setNextWidth] = React.useState(width)
-  const [nextHeight, setNextHeight] = React.useState(height)
-
-  // Keep local state in sync when the project changes externally
-  React.useEffect(() => {
-    setNextWidth(width)
-    setNextHeight(height)
-  }, [width, height])
-
-  return (
-    <div className="status-card">
-      <h3>Map size</h3>
-      <div className="size-grid">
-        <label className="field">
-          <span>Width</span>
-          <input
-            type="number"
-            min="1"
-            max="5000"
-            value={nextWidth}
-            onChange={(e) => setNextWidth(Math.max(1, Math.floor(Number(e.target.value))))}
-          />
-        </label>
-        <label className="field">
-          <span>Height</span>
-          <input
-            type="number"
-            min="1"
-            max="5000"
-            value={nextHeight}
-            onChange={(e) => setNextHeight(Math.max(1, Math.floor(Number(e.target.value))))}
-          />
-        </label>
-      </div>
-      <button
-        type="button"
-        className="secondary"
-        onClick={() => onCreateBlankMap(nextWidth, nextHeight)}
-      >
-        New blank map
+    <header className="toolbar">
+      {/* Brand */}
+      <button type="button" className="toolbar-brand" onClick={onGoHome} aria-label="Go to home">
+        <img src="/Openfront-Editor-Logo.png" alt="OpenFront" className="toolbar-logo" />
+        <h1 className="toolbar-title">Map Editor</h1>
       </button>
-    </div>
+
+      <div className="toolbar-divider" />
+
+      {/* Tools */}
+      <div className="toolbar-section">
+        <div className="toolbar-tools">
+          <button type="button" className={tool === 'land' ? 'active' : ''} onClick={() => setTool('land')}>Land</button>
+          <button type="button" className={tool === 'water' ? 'active' : ''} onClick={() => setTool('water')}>Water</button>
+          <button type="button" className={tool === 'nation' ? 'active' : ''} onClick={() => setTool('nation')}>Nation</button>
+        </div>
+      </div>
+
+      <div className="toolbar-divider" />
+
+      {/* Brush size */}
+      {tool !== 'nation' && (
+        <div className="toolbar-slider">
+          <span className="toolbar-section-label">Brush</span>
+          <input
+            type="range"
+            min="1"
+            max="50"
+            step="1"
+            value={brushSize}
+            onInput={(e) => setBrushSize(Number(e.currentTarget.value))}
+            onChange={(e) => setBrushSize(Number(e.currentTarget.value))}
+          />
+          <strong>{brushSize}</strong>
+        </div>
+      )}
+
+      {/* Elevation */}
+      {tool !== 'nation' && (
+        <div className="toolbar-slider">
+          <span className="toolbar-section-label">Elev</span>
+          <input
+            type="range"
+            min="0"
+            max="255"
+            value={elevationValue}
+            onInput={(e) => setElevationValue(Number(e.currentTarget.value))}
+            onChange={(e) => setElevationValue(Number(e.currentTarget.value))}
+          />
+          <strong>{elevationValue}</strong>
+          <button
+            type="button"
+            className={`elevation-sampler-btn${isSampling ? ' active' : ''}`}
+            title="Sample elevation from map (or Alt+click on canvas)"
+            aria-label="Sample elevation"
+            onClick={() => setIsSampling(!isSampling)}
+          >
+            <EyedropperIcon />
+          </button>
+        </div>
+      )}
+
+      <div className="toolbar-divider" />
+
+      {/* Zoom */}
+      <div className="toolbar-slider">
+        <span className="toolbar-section-label">Zoom</span>
+        <input
+          type="range"
+          min="0.001"
+          max="6"
+          step="0.001"
+          value={zoom}
+          onInput={(e) => handleZoomChange(Number(e.currentTarget.value))}
+          onChange={(e) => handleZoomChange(Number(e.currentTarget.value))}
+        />
+        <strong>{zoom.toFixed(1)}x</strong>
+      </div>
+
+      <div className="toolbar-divider" />
+
+      {/* Nation tool controls */}
+      {tool === 'nation' && (
+        <>
+          <div className="toolbar-slider toolbar-nation-count">
+            <span className="toolbar-section-label">Nations</span>
+            <input
+              type="number"
+              min={0}
+              max={500}
+              value={nationCountStr}
+              onChange={(e) => setNationCountStr(e.target.value)}
+              className="toolbar-nation-input"
+            />
+          </div>
+          <label className="toolbar-checkbox" title="Generate flags for nations">
+            <input
+              type="checkbox"
+              checked={nationUseFlags}
+              onChange={(e) => setNationUseFlags(e.target.checked)}
+            />
+            <span>Flags</span>
+          </label>
+          <button
+            type="button"
+            className="primary toolbar-nation-btn"
+            disabled={nationCountStr.trim() === '' || Number(nationCountStr) <= 0}
+            onClick={() => {
+              const n = Math.min(500, Math.max(1, Math.floor(Number(nationCountStr))))
+              autoAddNations(n, nationUseFlags)
+            }}
+          >
+            Generate
+          </button>
+          <div className="toolbar-divider" />
+        </>
+      )}
+
+      {/* Spacer */}
+      <div style={{ flex: 1, minWidth: 0 }} />
+
+      {/* Reset */}
+      {onResetMap && (
+        <button
+          type="button"
+          className="toolbar-reset"
+          style={confirmReset ? { background: 'rgba(239, 68, 68, 0.35)', color: '#fca5a5' } : undefined}
+          onClick={handleReset}
+        >
+          {confirmReset ? 'Confirm?' : 'Reset'}
+        </button>
+      )}
+
+      {/* Shortcuts */}
+      <ShortcutsButton />
+    </header>
   )
 }
 
@@ -325,7 +251,7 @@ function ShortcutsButton(): React.ReactElement {
   const handleToggle = () => {
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
-      setPopupPos({ top: rect.bottom + 8, left: rect.left })
+      setPopupPos({ top: rect.bottom + 6, left: rect.left - 120 })
     }
     setOpen((v) => !v)
   }
@@ -358,10 +284,11 @@ function ShortcutsButton(): React.ReactElement {
       <button
         ref={btnRef}
         type="button"
-        className="shortcuts-btn"
+        className="toolbar-btn"
         aria-label="Keyboard shortcuts"
         title="Keyboard shortcuts"
         onClick={handleToggle}
+        style={{ fontSize: 16 }}
       >
         ⌨
       </button>
@@ -386,46 +313,6 @@ function ShortcutsButton(): React.ReactElement {
           </table>
         </div>
       )}
-    </div>
-  )
-}
-
-function ProjectInfoPanel({ width, height }: { width: number; height: number }): React.ReactElement {
-  const projectNations = useEditorStore((state) => state.project.nations)
-  const landTileCount = useEditorStore((state) => state.landTileCount)
-  const atLimit = landTileCount >= MAX_LAND_TILES
-  const pct = Math.min(100, (landTileCount / MAX_LAND_TILES) * 100)
-
-  return (
-    <div className="status-card">
-      <h3>Project</h3>
-      <dl>
-        <div>
-          <dt>Total tiles</dt>
-          <dd>{(width * height).toLocaleString()}</dd>
-        </div>
-        <div className="land-tiles-row">
-          <dt>Land tiles</dt>
-          <div className="land-tiles-bar-track" aria-hidden="true">
-            <div
-              className="land-tiles-bar-fill"
-              style={{
-                width: `${pct}%`,
-                background: atLimit
-                  ? 'linear-gradient(90deg,#ef4444,#f87171)'
-                  : 'linear-gradient(90deg,var(--accent),var(--accent-2))',
-              }}
-            />
-          </div>
-          <dd className="land-tiles-count" style={{ color: atLimit ? '#f87171' : undefined }}>
-            {landTileCount.toLocaleString()} / {MAX_LAND_TILES.toLocaleString()}
-          </dd>
-        </div>
-        <div>
-          <dt>Nations</dt>
-          <dd>{projectNations.length}</dd>
-        </div>
-      </dl>
     </div>
   )
 }

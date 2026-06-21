@@ -47,9 +47,6 @@ function countLandTiles(terrain: Uint8Array): number {
  * going through Immer.  After mutating, writes the changed pixels directly
  * into the shared ImageData buffer (no chunk cache, no LRU, no copy).
  *
- * Enforces the MAX_LAND_TILES limit: land tiles that would push the count
- * over the limit are silently skipped.
- *
  * Call commitPaint() on pointerup to bump renderRevision and trigger the
  * persist middleware so the stroke is saved to localStorage.
  */
@@ -70,11 +67,7 @@ export function paintTilesDirect(tileX: number, tileY: number): void {
         terrain[index] = 0
         magnitude[index] = 0
       } else {
-        if (terrain[index] === 0) {
-          // Would add a new land tile — enforce limit
-          if (_landTileCount + landDelta >= MAX_LAND_TILES) continue
-          landDelta++
-        }
+        if (terrain[index] === 0) landDelta++
         terrain[index] = 1
         magnitude[index] = elevationValue
       }
@@ -175,7 +168,7 @@ type EditorStoreState = {
   cancelNationPlacement: () => void
   removeNation: (nationId: string) => void
   removeAllNations: () => void
-  autoAddNations: (count: number) => void
+  autoAddNations: (count: number, useFlags?: boolean) => void
   undo: () => void
   redo: () => void
   setProjectName: (name: string) => void
@@ -232,7 +225,7 @@ function deserializeProject(project: SerializedProject | MapProject): MapProject
         : base64ToTypedArray(project.magnitude as string),
     nations: (project.nations ?? []).map((nation) => ({
       ...nation,
-      countryCode: nation.countryCode || 'US',
+      countryCode: nation.countryCode ?? '',
     })),
     metadata: project.metadata ?? {
       author: '',
@@ -465,7 +458,7 @@ export const useEditorStore = create<EditorStoreState>()(
           state.project.nations.push({
             id: createNationId(),
             name: label,
-            countryCode: state.nationCountryCode || 'US',
+            countryCode: state.nationCountryCode,
             x: pending.x,
             y: pending.y,
           })
@@ -493,7 +486,7 @@ export const useEditorStore = create<EditorStoreState>()(
           state.renderRevision = (state.renderRevision ?? 0) + 1
         })
       },
-      autoAddNations: (count) => {
+      autoAddNations: (count, useFlags = true) => {
         const { project } = useEditorStore.getState()
         useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
         set((state) => {
@@ -537,7 +530,7 @@ export const useEditorStore = create<EditorStoreState>()(
             state.project.nations.push({
               id: createNationId(),
               name: randomGoofyName(),
-              countryCode: randomFlag(),
+              countryCode: useFlags ? randomFlag() : '',
               x: pos.x,
               y: pos.y,
             })

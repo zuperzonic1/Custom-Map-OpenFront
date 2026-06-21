@@ -8,51 +8,131 @@ function flagUrl(code: string): string {
 
 export interface InfoPanelProps {
   onExportMap?: () => void
-  onExportPng?: () => void
   exportStatus: string
   exportFiles: string[]
 }
 
+type PanelTab = 'meta' | 'export' | 'newmap'
+
 export function InfoPanel({
   onExportMap,
-  onExportPng,
   exportStatus,
   exportFiles,
 }: InfoPanelProps): React.ReactElement {
+  const [activeTab, setActiveTab] = React.useState<PanelTab>('meta')
   const projectWidth = useEditorStore((state) => state.project.width)
   const projectHeight = useEditorStore((state) => state.project.height)
-  const projectNations = useEditorStore((state) => state.project.nations)
 
   return (
-    <aside className="panel info">
-      <h2>Map metadata</h2>
-
-      <MetadataSection />
-      <NationsSection nations={projectNations} />
-
-      <div className="status-card minimap-card">
-        <Minimap width={projectWidth} height={projectHeight} />
+    <aside className="panel">
+      {/* Tab bar */}
+      <div className="panel-tabs">
+        <button
+          type="button"
+          className={`panel-tab${activeTab === 'meta' ? ' active' : ''}`}
+          onClick={() => setActiveTab('meta')}
+          title="Metadata"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+          <span>Meta</span>
+        </button>
+        <button
+          type="button"
+          className={`panel-tab${activeTab === 'export' ? ' active' : ''}`}
+          onClick={() => setActiveTab('export')}
+          title="Export"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span>Export</span>
+        </button>
+        <button
+          type="button"
+          className={`panel-tab${activeTab === 'newmap' ? ' active' : ''}`}
+          onClick={() => setActiveTab('newmap')}
+          title="New map"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+          </svg>
+          <span>New</span>
+        </button>
       </div>
 
-      <ExportSection
-        onExportMap={onExportMap}
-        onExportPng={onExportPng}
-        exportStatus={exportStatus}
-        exportFiles={exportFiles}
-      />
+      {/* Tab content (scrollable) */}
+      <div className="panel-content">
+        {activeTab === 'meta' && <MetaTabContent />}
+        {activeTab === 'export' && (
+          <ExportSection
+            onExportMap={onExportMap}
+            exportStatus={exportStatus}
+            exportFiles={exportFiles}
+          />
+        )}
+        {activeTab === 'newmap' && (
+          <MapSizePanel
+            width={projectWidth}
+            height={projectHeight}
+          />
+        )}
+      </div>
+
+      {/* Minimap — always at the bottom */}
+      <div className="panel-minimap-area">
+        <h3 className="panel-minimap-label">Minimap</h3>
+        <Minimap width={projectWidth} height={projectHeight} />
+      </div>
     </aside>
   )
 }
 
+function MetaTabContent(): React.ReactElement {
+  const projectWidth = useEditorStore((state) => state.project.width)
+  const projectHeight = useEditorStore((state) => state.project.height)
+  const projectNations = useEditorStore((state) => state.project.nations)
+  const tool = useEditorStore((state) => state.tool)
+
+  return (
+    <>
+      <MetadataSection />
+      <ProjectInfoPanel width={projectWidth} height={projectHeight} />
+      <NationsSection nations={projectNations} />
+      {tool === 'nation' && <NationHelp />}
+    </>
+  )
+}
+
 function MetadataSection(): React.ReactElement {
+  const projectName = useEditorStore((state) => state.project.name)
   const projectMetadataAuthor = useEditorStore((state) => state.project.metadata.author)
   const projectMetadataDescription = useEditorStore((state) => state.project.metadata.description)
+  const setProjectName = useEditorStore((state) => state.setProjectName)
   const setProjectMetadata = useEditorStore((state) => state.setProjectMetadata)
 
   return (
-    <div className="status-card">
+    <div className="panel-section">
       <h3>Metadata</h3>
       <label className="field">
+        <span>Map Name</span>
+        <input
+          value={projectName}
+          onChange={(event) => setProjectName(event.target.value)}
+          placeholder="Map name"
+        />
+      </label>
+      <label className="field" style={{ marginTop: 6 }}>
         <span>Author</span>
         <input
           value={projectMetadataAuthor}
@@ -60,15 +140,40 @@ function MetadataSection(): React.ReactElement {
           placeholder="Author name"
         />
       </label>
-      <label className="field">
+      <label className="field" style={{ marginTop: 6 }}>
         <span>Description</span>
         <textarea
           value={projectMetadataDescription}
           onChange={(event) => setProjectMetadata('description', event.target.value)}
           placeholder="Map description"
-          rows={4}
+          rows={3}
         />
       </label>
+    </div>
+  )
+}
+
+function ProjectInfoPanel({ width, height }: { width: number; height: number }): React.ReactElement {
+  const projectNations = useEditorStore((state) => state.project.nations)
+  const landTileCount = useEditorStore((state) => state.landTileCount)
+
+  return (
+    <div className="panel-section project-info">
+      <h3>Project</h3>
+      <dl>
+        <div>
+          <dt>Total tiles</dt>
+          <dd>{(width * height).toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Land tiles</dt>
+          <dd>{landTileCount.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Nations</dt>
+          <dd>{projectNations.length}</dd>
+        </div>
+      </dl>
     </div>
   )
 }
@@ -82,7 +187,7 @@ function NationsSection({
   const removeAllNations = useEditorStore((state) => state.removeAllNations)
 
   return (
-    <div className="status-card">
+    <div className="panel-section">
       <div className="nations-section-header">
         <h3>Nations</h3>
         {nations.length > 0 && (
@@ -104,13 +209,17 @@ function NationsSection({
           {nations.map((nation) => (
             <li key={nation.id} className="nation-row">
               <div className="nation-row-info">
-                <img
-                  className="nation-flag"
-                  src={flagUrl(nation.countryCode || 'us')}
-                  alt={nation.countryCode || 'US'}
-                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
-                  onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
-                />
+                {nation.countryCode ? (
+                  <img
+                    className="nation-flag"
+                    src={flagUrl(nation.countryCode || 'us')}
+                    alt={nation.countryCode || 'US'}
+                    onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                    onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
+                  />
+                ) : (
+                  <div className="nation-flag nation-flag-placeholder" />
+                )}
                 <div>
                   <strong>{nation.name}</strong>
                   <span>{nation.x}, {nation.y}</span>
@@ -128,6 +237,24 @@ function NationsSection({
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+/**
+ * Nation placement help — shown only when the Nation tool is active.
+ */
+function NationHelp(): React.ReactElement {
+  const pendingNationPlacement = useEditorStore((state) => state.pendingNationPlacement)
+
+  return (
+    <div className="panel-section">
+      <h3>Nation tool</h3>
+      <p className="empty-state" style={{ marginTop: 8, fontSize: 12 }}>
+        {pendingNationPlacement
+          ? 'Nation dialog is open — confirm or cancel it.'
+          : 'Click a land tile to open the placement dialog.'}
+      </p>
     </div>
   )
 }
@@ -279,8 +406,8 @@ function Minimap({
         const rw = cx2 - cx1 - inset * 2
         const rh = cy2 - cy1 - inset * 2
         if (rw > 0 && rh > 0) {
-          // Match the 12px CSS border-radius of .minimap-frame
-          const r = Math.min(12 * dpr, rw / 2, rh / 2)
+          // Match the 10px CSS border-radius of .minimap-frame
+          const r = Math.min(10 * dpr, rw / 2, rh / 2)
           ctx.beginPath()
           ctx.roundRect(rx, ry, rw, rh, r)
           ctx.stroke()
@@ -360,33 +487,80 @@ function Minimap({
   )
 }
 
+function MapSizePanel({
+  width,
+  height,
+}: {
+  width: number
+  height: number
+}): React.ReactElement {
+  const [nextWidth, setNextWidth] = React.useState(width)
+  const [nextHeight, setNextHeight] = React.useState(height)
+
+  // Keep local state in sync when the project changes externally
+  React.useEffect(() => {
+    setNextWidth(width)
+    setNextHeight(height)
+  }, [width, height])
+
+  return (
+    <div className="panel-section">
+      <h3>New Map</h3>
+      <p className="empty-state" style={{ marginBottom: 10, fontSize: 12 }}>
+        Create a new blank map with custom dimensions.
+      </p>
+      <div className="size-grid">
+        <label className="field">
+          <span>Width</span>
+          <input
+            type="number"
+            min="1"
+            max="5000"
+            value={nextWidth}
+            onChange={(e) => setNextWidth(Math.max(1, Math.floor(Number(e.target.value))))}
+          />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input
+            type="number"
+            min="1"
+            max="5000"
+            value={nextHeight}
+            onChange={(e) => setNextHeight(Math.max(1, Math.floor(Number(e.target.value))))}
+          />
+        </label>
+      </div>
+      <button
+        type="button"
+        className="primary"
+        onClick={() => useEditorStore.getState().createBlankProject(nextWidth, nextHeight)}
+        style={{ width: '100%' }}
+      >
+        Create blank map
+      </button>
+    </div>
+  )
+}
+
 function ExportSection({
   onExportMap,
-  onExportPng,
   exportStatus,
   exportFiles,
 }: {
   onExportMap?: () => void
-  onExportPng?: () => void
   exportStatus: string
   exportFiles: string[]
 }): React.ReactElement {
   return (
-    <div className="status-card">
+    <div className="panel-section">
       <h3>Export</h3>
-      {exportStatus !== 'Idle' && <p>{exportStatus}</p>}
-      <div className="button-group">
-        {onExportMap && (
-          <button type="button" className="secondary" onClick={onExportMap}>
-            Map Files
-          </button>
-        )}
-        {onExportPng && (
-          <button type="button" className="secondary" onClick={onExportPng}>
-            PNG
-          </button>
-        )}
-      </div>
+      {exportStatus !== 'Idle' && <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 8px' }}>{exportStatus}</p>}
+      {onExportMap && (
+        <button type="button" className="primary" onClick={onExportMap} style={{ width: '100%' }}>
+          Export Map Files
+        </button>
+      )}
       {exportFiles.length > 0 ? (
         <ul className="nations-list export-list">
           {exportFiles.map((fileName) => (

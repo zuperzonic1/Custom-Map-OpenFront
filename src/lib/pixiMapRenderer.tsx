@@ -16,7 +16,7 @@ export type PixiMapOptions = {
   tileSize: number
 }
 
-export const BASE_TILE_SIZE = 14
+export const BASE_TILE_SIZE = 8
 
 // ─── Nation marker helpers ────────────────────────────────────────────────────
 
@@ -389,67 +389,6 @@ export function usePixiMapRenderer(
   return { isReady, fps, canvasRef }
 }
 
-// ─── Export Info Overlay component ────────────────────────────────────────────
-
-function ExportInfoOverlay() {
-  const [showTooltip, setShowTooltip] = useState(false)
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
-  const infoIconRef = useRef<HTMLButtonElement | null>(null)
-
-  const handleInfoIconMouseEnter = () => {
-    const icon = infoIconRef.current
-    if (!icon) return
-
-    const rect = icon.getBoundingClientRect()
-    setTooltipPos({
-      x: rect.left + rect.width / 2,
-      y: rect.bottom + 8,
-    })
-    setShowTooltip(true)
-  }
-
-  const handleInfoIconMouseLeave = () => {
-    setShowTooltip(false)
-  }
-
-  return (
-    <>
-      <div className="verify-map-overlay">
-        <button
-          ref={infoIconRef}
-          className="verify-info-icon"
-          onMouseEnter={handleInfoIconMouseEnter}
-          onMouseLeave={handleInfoIconMouseLeave}
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Information about export cleanup"
-        >
-          ⓘ
-        </button>
-      </div>
-
-      {showTooltip && (
-        <div
-          className="verify-tooltip"
-          style={{
-            left: `${tooltipPos.x}px`,
-            top: `${tooltipPos.y}px`,
-            transform: 'translateX(-50%)',
-          }}
-        >
-          <strong>Export Cleanup</strong>
-          <p style={{ margin: '8px 0 8px 0', fontSize: '12px', lineHeight: '1.4' }}>
-            When exporting, the following are automatically removed:
-          </p>
-          <ul>
-            <li>Land masses smaller than 30 tiles</li>
-            <li>Water bodies smaller than 200 tiles</li>
-          </ul>
-        </div>
-      )}
-    </>
-  )
-}
-
 // ─── Canvas component ─────────────────────────────────────────────────────────
 
 export function PixiMapEditor() {
@@ -498,6 +437,8 @@ export function PixiMapEditor() {
 
         let el = existingMap.get(id)
         if (!el) {
+          // Skip flag creation for nations without a countryCode
+          if (!nation.countryCode) continue
           el = document.createElement('img')
           el.dataset.nationId = id
           el.style.cssText =
@@ -507,7 +448,13 @@ export function PixiMapEditor() {
           layer.appendChild(el)
         }
 
-        const newSrc = `https://flagcdn.com/w40/${(nation.countryCode || 'us').toLowerCase()}.png`
+        // If nation had a flag but now doesn't, remove the element
+        if (!nation.countryCode) {
+          el.remove()
+          continue
+        }
+
+        const newSrc = `https://flagcdn.com/w40/${nation.countryCode.toLowerCase()}.png`
         if (el.src !== newSrc) el.src = newSrc
 
         el.style.left = `${screenX}px`
@@ -770,6 +717,7 @@ export function PixiMapEditor() {
 
   // Derive the canvas cursor based on tool / sampling state.
   const isSampling = useEditorStore((state) => state.isSampling)
+  const landTileCount = useEditorStore((state) => state.landTileCount)
   const canvasCursor = isSampling ? 'crosshair' : 'crosshair'
   // We keep crosshair as the base; browser-native eyedropper cursors are
   // inconsistent across OSes. The sampler-active class adds a CSS ring instead.
@@ -802,7 +750,14 @@ export function PixiMapEditor() {
         FPS {fps}
       </div>
 
-      <ExportInfoOverlay />
+      <div
+        className="fps-counter"
+        aria-label="Land tiles"
+        style={{ top: 36 }}
+      >
+        🗺 {landTileCount.toLocaleString()}
+      </div>
+
     </div>
   )
 }

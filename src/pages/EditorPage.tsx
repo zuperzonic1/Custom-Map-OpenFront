@@ -1,7 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import '../App.css'
-import { buildExportBundle, buildExportPng, downloadBlob } from '../lib/exportMap'
+import { buildExportBundle, downloadBlob } from '../lib/exportMap'
 import { useEditorStore } from '../store/editorStore'
 import { PixiMapEditor as PixiCanvas } from '../lib/pixiMapRenderer'
 import { ControlsPanel } from '../components/ControlsPanel'
@@ -73,7 +73,6 @@ export function EditorPage(): React.ReactElement {
   const navigate = useNavigate()
   const onGoHome = () => navigate('/')
 
-  const projectName = useEditorStore((state) => state.project.name)
   const projectWidth = useEditorStore((state) => state.project.width)
   const projectHeight = useEditorStore((state) => state.project.height)
   const pendingNationPlacement = useEditorStore((state) => state.pendingNationPlacement)
@@ -92,9 +91,6 @@ export function EditorPage(): React.ReactElement {
     }
   }, [pendingNationPlacement]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [exportStatus, setExportStatus] = React.useState('Idle')
-  const [exportFiles, setExportFiles] = React.useState<string[]>([])
-
   const resetProject = (): void => {
     setNationName('Spawn 1')
     setNationCountryCode('US')
@@ -102,9 +98,8 @@ export function EditorPage(): React.ReactElement {
     useEditorStore.getState().createBlankProject(projectWidth, projectHeight)
   }
 
-  const handleCreateBlankMap = (w: number, h: number): void => {
-    useEditorStore.getState().createBlankProject(w, h)
-  }
+  const [exportStatus, setExportStatus] = React.useState('Idle')
+  const [exportFiles, setExportFiles] = React.useState<string[]>([])
 
   const handleExportMap = async (): Promise<void> => {
     setExportStatus('Exporting…')
@@ -119,65 +114,22 @@ export function EditorPage(): React.ReactElement {
     }
   }
 
-  const handleExportPng = async (): Promise<void> => {
-    setExportStatus('Exporting PNG…')
-    setExportFiles([])
-    try {
-      const { project } = useEditorStore.getState()
-      const blob = await buildExportPng(project)
-      downloadBlob(blob, `${project.name || 'openfront-map'}.png`)
-      setExportStatus('PNG export complete')
-    } catch {
-      setExportStatus('PNG export failed')
-    }
-  }
+  const tool = useEditorStore((state) => state.tool)
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <button
-          type="button"
-          className="topbar-left topbar-home-btn"
-          onClick={onGoHome}
-          aria-label="Go to home"
-        >
-          <img
-            src="/Openfront-Editor-Logo.png"
-            alt="OpenFront Editor Logo"
-            className="editor-logo"
-          />
-          <div>
-            <p className="eyebrow">OpenFront map editor</p>
-            <h1>Map Editor</h1>
-          </div>
-        </button>
-
-        <div className="topbar-actions">
-          <label className="field field-inline">
-            <span>Name</span>
-            <input
-              value={projectName}
-              onChange={(event) => useEditorStore.getState().setProjectName(event.target.value)}
-            />
-          </label>
-          <button type="button" className="secondary" onClick={resetProject}>
-            Reset map
-          </button>
-        </div>
-      </header>
+      <ControlsPanel onGoHome={onGoHome} onResetMap={resetProject} />
 
       <section className="workspace">
-        <ControlsPanel onCreateBlankMap={handleCreateBlankMap} />
-
         <main className="canvas-shell">
           <div className="canvas-frame">
             <PixiCanvas />
           </div>
 
-          <div className="footer-note">
+          <div className="status-bar">
             <span>Drag to paint.</span>
-            <span>Hold Space and drag to pan.</span>
-            <span>Nation tool opens a placement dialog.</span>
+            <span>Space + drag to pan.</span>
+            {tool === 'nation' && <span>Click a land tile to place a nation.</span>}
           </div>
         </main>
 
@@ -185,11 +137,10 @@ export function EditorPage(): React.ReactElement {
           exportStatus={exportStatus}
           exportFiles={exportFiles}
           onExportMap={() => void handleExportMap()}
-          onExportPng={() => void handleExportPng()}
         />
       </section>
 
-  {pendingNationPlacement && (
+      {pendingNationPlacement && (
         <div
           className="modal-backdrop"
           role="presentation"
@@ -240,13 +191,17 @@ export function EditorPage(): React.ReactElement {
               <label className="field">
                 <span>Flag</span>
                 <div className="flag-select-row">
-                  <img
-                    className="flag-preview"
-                    src={flagUrl(nationCountryCode, 40)}
-                    alt={nationCountryCode}
-                    onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
-                    onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
-                  />
+                  {nationCountryCode ? (
+                    <img
+                      className="flag-preview"
+                      src={flagUrl(nationCountryCode, 40)}
+                      alt={nationCountryCode}
+                      onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                      onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
+                    />
+                  ) : (
+                    <div className="flag-preview flag-preview-empty" />
+                  )}
                   <button
                     type="button"
                     className="secondary name-random-btn"
@@ -255,6 +210,7 @@ export function EditorPage(): React.ReactElement {
                         COUNTRY_CODES[Math.floor(Math.random() * COUNTRY_CODES.length)],
                       )
                     }
+                    disabled={!nationCountryCode}
                     title="Random flag"
                   >
                     🎲
@@ -264,6 +220,7 @@ export function EditorPage(): React.ReactElement {
                     onChange={(event) => setNationCountryCode(event.target.value)}
                     title="ISO 3166-1 alpha-2 country code"
                   >
+                    <option value="">— No flag —</option>
                     {COUNTRY_CODES.map((code) => (
                       <option key={code} value={code}>
                         {code}
@@ -285,7 +242,6 @@ export function EditorPage(): React.ReactElement {
           </div>
         </div>
       )}
-
     </div>
   )
 }

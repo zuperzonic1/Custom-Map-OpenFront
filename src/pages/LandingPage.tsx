@@ -26,11 +26,6 @@ const FEATURES = [
     description: 'WebGL-powered canvas renders your map in real time as you paint.',
   },
   {
-    icon: '📦',
-    title: 'OpenFront Export',
-    description: 'Export a ready-to-use .zip with binary map data and manifest.',
-  },
-  {
     icon: '💾',
     title: 'Auto-save',
     description: 'Your work is automatically persisted in the browser between sessions.',
@@ -56,7 +51,7 @@ export function LandingPage(): React.ReactElement {
         </h1>
         <p>
           A fully browser-based editor for creating custom OpenFront maps. Paint terrain, set
-          elevations, place nation spawns and export a game-ready zip — no installs required.
+          elevations and place nation spawns — all in your browser with no installs required.
         </p>
       </section>
 
@@ -74,55 +69,6 @@ export function LandingPage(): React.ReactElement {
         </div>
       </section>
 
-      <section className="landing-guide">
-        <h2>How to Use Your Map In-Game</h2>
-        <p>
-          Follow these steps to create, export, and enable your custom map in OpenFront. See the{' '}
-          <a
-            href="https://openfrontio-openfrontio.mintlify.app/map-generator/usage"
-            target="_blank"
-            rel="noreferrer"
-          >
-            original usage docs
-          </a>{' '}
-          for the full guide.
-        </p>
-        <ol>
-          <li>
-            <strong>Create or Import Your Map</strong>
-            <span>
-              Start with a blank canvas (choose a size and click <em>Open Editor</em>) or import an
-              existing image to use as a base. Paint terrain, set elevations, place nation spawn
-              points, then click <strong>Export → Map Files</strong> to download your map as a{' '}
-              <code>.zip</code>.
-            </span>
-          </li>
-          <li>
-            <strong>Add Map Files to the Game</strong>
-            <span>
-              In your OpenFrontIO repository, create a new folder at{' '}
-              <code>resources/maps/&lt;YourMapName&gt;/</code>. Unzip the downloaded{' '}
-              <code>.zip</code> and move all the files into that folder.
-            </span>
-          </li>
-          <li>
-            <strong>Update Game Types</strong>
-            <span>Add to <code>GameMapType</code> and <code>mapCategories</code> in <code>src/core/game/Game.ts</code></span>
-          </li>
-          <li>
-            <strong>Update Map Playlist</strong>
-            <span>Add to <code>src/server/MapPlaylist.ts</code></span>
-          </li>
-          <li>
-            <strong>Add Translation</strong>
-            <span>Add to the map object in <code>resources/lang/en.json</code></span>
-          </li>
-          <li>
-            <strong>Update Credits</strong>
-            <span>Add license and attribution to <code>CREDITS.md</code></span>
-          </li>
-        </ol>
-      </section>
 
       {/* ── features grid ──────────────────────── */}
       <section className="landing-features">
