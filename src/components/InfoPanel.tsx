@@ -116,10 +116,10 @@ function MetaTabContent(): React.ReactElement {
 
 function MetadataSection(): React.ReactElement {
   const projectName = useEditorStore((state) => state.project.name)
-  const projectMetadataAuthor = useEditorStore((state) => state.project.metadata.author)
-  const projectMetadataDescription = useEditorStore((state) => state.project.metadata.description)
+  // const projectMetadataAuthor = useEditorStore((state) => state.project.metadata.author)
+  // const projectMetadataDescription = useEditorStore((state) => state.project.metadata.description)
   const setProjectName = useEditorStore((state) => state.setProjectName)
-  const setProjectMetadata = useEditorStore((state) => state.setProjectMetadata)
+  // const setProjectMetadata = useEditorStore((state) => state.setProjectMetadata)
 
   return (
     <div className="panel-section">
