@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useEditorStore } from '../store/editorStore'
-import { useViewportStore } from '../store/viewportStore'
 
 /** Inline eyedropper/pipette SVG icon. */
 function EyedropperIcon() {
@@ -42,15 +41,9 @@ export function ControlsPanel({
   const isSampling = useEditorStore((state) => state.isSampling)
   const setIsSampling = useEditorStore((state) => state.setIsSampling)
   const autoAddNations = useEditorStore((state) => state.autoAddNations)
-  const zoom = useViewportStore((state) => state.zoom)
   const [confirmReset, setConfirmReset] = useState(false)
   const [nationCountStr, setNationCountStr] = React.useState('8')
   const [nationUseFlags, setNationUseFlags] = React.useState(true)
-
-  const handleZoomChange = (value: number): void => {
-    const clamped = Math.max(0.001, Math.min(6, value))
-    useViewportStore.setState({ zoom: clamped })
-  }
 
   // Auto-cancel reset confirmation after 4 seconds
   useEffect(() => {
@@ -155,25 +148,6 @@ export function ControlsPanel({
         </div>
       )}
 
-      <div className="toolbar-divider" />
-
-      {/* Zoom */}
-      <div className="toolbar-slider">
-        <span className="toolbar-section-label">Zoom</span>
-        <input
-          type="range"
-          min="0.001"
-          max="6"
-          step="0.001"
-          value={zoom}
-          onInput={(e) => handleZoomChange(Number(e.currentTarget.value))}
-          onChange={(e) => handleZoomChange(Number(e.currentTarget.value))}
-        />
-        <strong>{zoom.toFixed(1)}x</strong>
-      </div>
-
-      <div className="toolbar-divider" />
-
       {/* Nation tool controls */}
       {tool === 'nation' && (
         <>
@@ -233,26 +207,22 @@ export function ControlsPanel({
 }
 
 const SHORTCUTS = [
+  { keys: '1 / 2 / 3', action: 'Land / Water / Nation tool' },
+  { keys: 'F', action: 'Fit map to view' },
   { keys: 'Space + Drag', action: 'Pan the map' },
   { keys: 'Scroll Wheel', action: 'Zoom in / out' },
   { keys: 'Ctrl + Z', action: 'Undo' },
   { keys: 'Ctrl + Y  /  Ctrl + Shift + Z', action: 'Redo' },
-  { keys: 'Alt + Click (Land tool)', action: 'Sample elevation' },
+  { keys: 'Alt + Click', action: 'Sample elevation (Land/Water)' },
 ]
 
 function ShortcutsButton(): React.ReactElement {
   const [open, setOpen] = useState(false)
-  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
   const popupRef = useRef<HTMLDivElement>(null)
 
   const close = useCallback(() => setOpen(false), [])
 
   const handleToggle = () => {
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect()
-      setPopupPos({ top: rect.bottom + 6, left: rect.left - 120 })
-    }
     setOpen((v) => !v)
   }
 
@@ -262,8 +232,7 @@ function ShortcutsButton(): React.ReactElement {
       if (
         popupRef.current &&
         !popupRef.current.contains(e.target as Node) &&
-        btnRef.current &&
-        !btnRef.current.contains(e.target as Node)
+        e.target instanceof Node
       ) {
         close()
       }
@@ -282,7 +251,6 @@ function ShortcutsButton(): React.ReactElement {
   return (
     <div className="shortcuts-wrapper">
       <button
-        ref={btnRef}
         type="button"
         className="toolbar-btn"
         aria-label="Keyboard shortcuts"
@@ -292,13 +260,12 @@ function ShortcutsButton(): React.ReactElement {
       >
         ⌨
       </button>
-      {open && popupPos && (
+      {open && (
         <div
           ref={popupRef}
           className="shortcuts-popup"
           role="dialog"
           aria-label="Keyboard shortcuts"
-          style={{ top: popupPos.top, left: popupPos.left }}
         >
           <p className="shortcuts-heading">Keyboard Shortcuts</p>
           <table className="shortcuts-table">

@@ -132,7 +132,7 @@ function MetadataSection(): React.ReactElement {
           placeholder="Map name"
         />
       </label>
-      <label className="field" style={{ marginTop: 6 }}>
+      {/* <label className="field" style={{ marginTop: 6 }}>
         <span>Author</span>
         <input
           value={projectMetadataAuthor}
@@ -148,7 +148,7 @@ function MetadataSection(): React.ReactElement {
           placeholder="Map description"
           rows={3}
         />
-      </label>
+      </label> */}
     </div>
   )
 }

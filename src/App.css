@@ -858,8 +858,11 @@ button.active {
 }
 
 .shortcuts-popup {
-  position: fixed;
+  position: absolute;
   z-index: 9999;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
   min-width: 280px;
   padding: 12px 14px;
   border: 1px solid var(--line);

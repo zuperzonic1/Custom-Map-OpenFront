@@ -507,6 +507,22 @@ export function PixiMapEditor() {
         isSpacePressedRef.current = true
       }
 
+      // Tool shortcuts: 1 = Land, 2 = Water, 3 = Nation
+      if (!isEditableTarget) {
+        switch (event.key) {
+          case '1': useEditorStore.getState().setTool('land'); event.preventDefault(); return
+          case '2': useEditorStore.getState().setTool('water'); event.preventDefault(); return
+          case '3': useEditorStore.getState().setTool('nation'); event.preventDefault(); return
+        }
+      }
+
+      // Fit map to view: F
+      if (!isEditableTarget && (event.key === 'f' || event.key === 'F')) {
+        event.preventDefault()
+        useViewportStore.setState({ pendingFitToView: true })
+        return
+      }
+
       // Undo: Ctrl+Z
       if (event.ctrlKey && event.code === 'KeyZ' && !event.shiftKey && !isEditableTarget) {
         event.preventDefault()
@@ -657,8 +673,8 @@ export function PixiMapEditor() {
     if (!tile) return
 
     // ── Elevation sampler ────────────────────────────────────────────────────
-    // Triggered by: sampler-mode toggle OR Alt+click while on the land tool.
-    if (store.isSampling || (event.altKey && store.tool === 'land')) {
+    // Triggered by: sampler-mode toggle OR Alt+click while on land/water tool.
+    if (store.isSampling || (event.altKey && (store.tool === 'land' || store.tool === 'water'))) {
       event.preventDefault()
       store.sampleElevationAt(tile.x, tile.y)
       return
