@@ -51,16 +51,26 @@ function countLandTiles(terrain: Uint8Array): number {
  * persist middleware so the stroke is saved to localStorage.
  */
 export function paintTilesDirect(tileX: number, tileY: number): void {
-  const { project, tool, brushSize, elevationValue } = useEditorStore.getState()
+  const { project, tool, brushSize, brushShape, elevationValue } = useEditorStore.getState()
   const radius = Math.max(0, brushSize - 1)
   const { terrain, magnitude, width, height } = project
 
   let landDelta = 0
 
+  // Track the affected bounding box for updateMapPixels
+  const minX = tileX - radius
+  const minY = tileY - radius
+  const maxX = tileX + radius
+  const maxY = tileY + radius
+
   for (let y = tileY - radius; y <= tileY + radius; y++) {
     if (y < 0 || y >= height) continue
     for (let x = tileX - radius; x <= tileX + radius; x++) {
       if (x < 0 || x >= width) continue
+
+      // Apply shape mask
+      if (!isTileInBrushShape(x - tileX, y - tileY, radius, brushShape)) continue
+
       const index = y * width + x
       if (tool === 'water') {
         if (terrain[index] === 1) landDelta--
@@ -77,7 +87,35 @@ export function paintTilesDirect(tileX: number, tileY: number): void {
   _landTileCount += landDelta
 
   // Write the painted rect directly into the shared ImageData buffer.
-  updateMapPixels(project, tileX - radius, tileY - radius, tileX + radius, tileY + radius)
+  updateMapPixels(project, minX, minY, maxX, maxY)
+}
+
+function isTileInBrushShape(dx: number, dy: number, radius: number, shape: BrushShape): boolean {
+  if (shape === 'square') return true
+
+  const r = radius
+
+  if (shape === 'circle') {
+    // Euclidean distance squared — include centre and edge tiles
+    return dx * dx + dy * dy <= r * r + r
+  }
+
+  if (shape === 'triangle') {
+    // Isosceles triangle pointing up:
+    // dy ranges from -r to r, and |dx| must be within the row width
+    if (dy < -r || dy > r) return false
+    // Half-width at this row: linearly interpolate from 0 at top (-r) to r at bottom (r)
+    const rowProgress = (dy + r) / (2 * r) // 0 at top, 1 at bottom
+    const halfWidth = Math.round(r * rowProgress)
+    return Math.abs(dx) <= halfWidth
+  }
+
+  if (shape === 'diamond') {
+    // Manhattan distance
+    return Math.abs(dx) + Math.abs(dy) <= r
+  }
+
+  return true
 }
 
 // Helper to serialize Uint8Array to base64 for efficient localStorage storage
@@ -130,6 +168,8 @@ export type MapProject = {
 
 export type EditorTool = 'land' | 'water' | 'nation'
 
+export type BrushShape = 'square' | 'circle' | 'triangle' | 'diamond'
+
 type PendingNationPlacement = {
   x: number
   y: number
@@ -145,6 +185,7 @@ type EditorStoreState = {
   project: MapProject
   tool: EditorTool
   brushSize: number
+  brushShape: BrushShape
   elevationValue: number
   nationName: string
   nationCountryCode: string
@@ -154,6 +195,7 @@ type EditorStoreState = {
   createBlankProject: (width?: number, height?: number) => void
   setTool: (tool: EditorTool) => void
   setBrushSize: (brushSize: number) => void
+  setBrushShape: (brushShape: BrushShape) => void
   setElevationValue: (value: number) => void
   setNationName: (name: string) => void
   setNationCountryCode: (countryCode: string) => void
@@ -243,6 +285,7 @@ type PartializedEditorState = {
   project: MapProject
   tool: EditorTool
   brushSize: number
+  brushShape: BrushShape
   elevationValue: number
   nationName: string
   nationCountryCode: string
@@ -328,6 +371,7 @@ export const useEditorStore = create<EditorStoreState>()(
       project: createBlankProject(),
       tool: 'land',
       brushSize: 1,
+      brushShape: 'square',
       elevationValue: 128,
       nationName: 'Spawn 1',
       nationCountryCode: 'US',
@@ -345,6 +389,7 @@ export const useEditorStore = create<EditorStoreState>()(
         set((state) => {
           state.project = newProject
           state.tool = 'land'
+          state.brushShape = 'square'
           state.nationName = 'Spawn 1'
           state.nationCountryCode = 'US'
           state.pendingNationPlacement = null
@@ -363,6 +408,10 @@ export const useEditorStore = create<EditorStoreState>()(
       setBrushSize: (brushSize) =>
         set((state) => {
           state.brushSize = Math.max(1, Math.min(50, Math.round(brushSize)))
+        }),
+      setBrushShape: (brushShape) =>
+        set((state) => {
+          state.brushShape = brushShape
         }),
       setElevationValue: (value) =>
         set((state) => {
@@ -638,6 +687,7 @@ export const useEditorStore = create<EditorStoreState>()(
         project: state.project,
         tool: state.tool,
         brushSize: state.brushSize,
+        brushShape: state.brushShape,
         elevationValue: state.elevationValue,
         nationName: state.nationName,
         nationCountryCode: state.nationCountryCode,

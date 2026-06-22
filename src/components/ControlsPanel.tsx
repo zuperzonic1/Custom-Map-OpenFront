@@ -36,6 +36,8 @@ export function ControlsPanel({
   const setTool = useEditorStore((state) => state.setTool)
   const brushSize = useEditorStore((state) => state.brushSize)
   const setBrushSize = useEditorStore((state) => state.setBrushSize)
+  const brushShape = useEditorStore((state) => state.brushShape)
+  const setBrushShape = useEditorStore((state) => state.setBrushShape)
   const elevationValue = useEditorStore((state) => state.elevationValue)
   const setElevationValue = useEditorStore((state) => state.setElevationValue)
   const isSampling = useEditorStore((state) => state.isSampling)
@@ -106,21 +108,57 @@ export function ControlsPanel({
 
       <div className="toolbar-divider" />
 
-      {/* Brush size */}
+      {/* Brush size & shape */}
       {tool !== 'nation' && (
-        <div className="toolbar-slider">
-          <span className="toolbar-section-label">Brush</span>
-          <input
-            type="range"
-            min="1"
-            max="50"
-            step="1"
-            value={brushSize}
-            onInput={(e) => setBrushSize(Number(e.currentTarget.value))}
-            onChange={(e) => setBrushSize(Number(e.currentTarget.value))}
-          />
-          <strong>{brushSize}</strong>
-        </div>
+        <>
+          <div className="toolbar-slider">
+            <span className="toolbar-section-label">Brush</span>
+            <input
+              type="range"
+              min="1"
+              max="50"
+              step="1"
+              value={brushSize}
+              onInput={(e) => setBrushSize(Number(e.currentTarget.value))}
+              onChange={(e) => setBrushSize(Number(e.currentTarget.value))}
+            />
+            <strong>{brushSize}</strong>
+          </div>
+          <div className="toolbar-shapes">
+            <button
+              type="button"
+              className={`shape-btn${brushShape === 'square' ? ' active' : ''}`}
+              onClick={() => setBrushShape('square')}
+              title="Square"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="10" height="10" /></svg>
+            </button>
+            <button
+              type="button"
+              className={`shape-btn${brushShape === 'circle' ? ' active' : ''}`}
+              onClick={() => setBrushShape('circle')}
+              title="Circle"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="5" /></svg>
+            </button>
+            <button
+              type="button"
+              className={`shape-btn${brushShape === 'triangle' ? ' active' : ''}`}
+              onClick={() => setBrushShape('triangle')}
+              title="Triangle"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="6,1 11,10 1,10" /></svg>
+            </button>
+            <button
+              type="button"
+              className={`shape-btn${brushShape === 'diamond' ? ' active' : ''}`}
+              onClick={() => setBrushShape('diamond')}
+              title="Diamond"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="6,1 11,6 6,11 1,6" /></svg>
+            </button>
+          </div>
+        </>
       )}
 
       {/* Elevation */}
@@ -209,6 +247,9 @@ export function ControlsPanel({
 const SHORTCUTS = [
   { keys: '1 / 2 / 3', action: 'Land / Water / Nation tool' },
   { keys: 'F', action: 'Fit map to view' },
+  { keys: '[ / ]', action: 'Decrease / Increase brush size' },
+  { keys: 'Shift + [ / Shift + ]', action: 'Decrease / Increase elevation by 50' },
+  { keys: 'Shift + S', action: 'Cycle brush shapes' },
   { keys: 'Space + Drag', action: 'Pan the map' },
   { keys: 'Scroll Wheel', action: 'Zoom in / out' },
   { keys: 'Ctrl + Z', action: 'Undo' },

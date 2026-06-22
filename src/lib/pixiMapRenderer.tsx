@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { autoDetectRenderer, Container, Sprite, Text, Texture, type Renderer } from 'pixi.js'
-import { useEditorStore, paintTilesDirect } from '../store/editorStore'
+import { useEditorStore, paintTilesDirect, type BrushShape } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
 import {
   mapCanvas,
@@ -405,6 +405,11 @@ export function PixiMapEditor() {
     tileSize: BASE_TILE_SIZE,
   })
 
+  // ── Brush preview overlay ref ────────────────────────────────────────────────
+  const brushPreviewRef = useRef<HTMLCanvasElement | null>(null)
+  const mousePosRef = useRef<{ x: number; y: number } | null>(null)
+  const isOverCanvasRef = useRef(false)
+
   // ── HTML flag overlay — positions flag <img> elements over each nation ───────
   // Uses direct DOM manipulation on each rAF tick (subscribed to both stores)
   // so flags track pan/zoom with zero React re-renders.
@@ -514,6 +519,49 @@ export function PixiMapEditor() {
           case '2': useEditorStore.getState().setTool('water'); event.preventDefault(); return
           case '3': useEditorStore.getState().setTool('nation'); event.preventDefault(); return
         }
+      }
+
+      // Decrease brush size: [
+      if (!isEditableTarget && event.key === '[') {
+        event.preventDefault()
+        const store = useEditorStore.getState()
+        store.setBrushSize(store.brushSize - 1)
+        return
+      }
+
+      // Increase brush size: ]
+      if (!isEditableTarget && event.key === ']') {
+        event.preventDefault()
+        const store = useEditorStore.getState()
+        store.setBrushSize(store.brushSize + 1)
+        return
+      }
+
+      // Cycle brush shapes: Shift+S
+      if (!isEditableTarget && event.shiftKey && (event.key === 's' || event.key === 'S')) {
+        event.preventDefault()
+        const SHAPES: BrushShape[] = ['square', 'circle', 'triangle', 'diamond']
+        const store = useEditorStore.getState()
+        const currentIndex = SHAPES.indexOf(store.brushShape)
+        const nextShape = SHAPES[(currentIndex + 1) % SHAPES.length]
+        store.setBrushShape(nextShape)
+        return
+      }
+
+      // Decrease elevation by 50: Shift+[ (key '{')
+      if (!isEditableTarget && event.key === '{') {
+        event.preventDefault()
+        const store = useEditorStore.getState()
+        store.setElevationValue(store.elevationValue - 50)
+        return
+      }
+
+      // Increase elevation by 50: Shift+] (key '}')
+      if (!isEditableTarget && event.key === '}') {
+        event.preventDefault()
+        const store = useEditorStore.getState()
+        store.setElevationValue(store.elevationValue + 50)
+        return
       }
 
       // Fit map to view: F
@@ -635,6 +683,184 @@ export function PixiMapEditor() {
 
     return { x, y }
   }
+
+  // ── Brush preview rendering ──────────────────────────────────────────────────
+  const drawBrushPreview = useCallback(() => {
+    const canvas = brushPreviewRef.current
+    if (!canvas || !isOverCanvasRef.current || !mousePosRef.current) return
+    const canvasEl = canvasRef.current
+    if (!canvasEl) return
+
+    const store = useEditorStore.getState()
+    const { tool, brushSize, brushShape, isSampling } = store
+
+    // Don't show preview for nation tool or when sampling
+    if (tool === 'nation' || isSampling) {
+      canvas.style.display = 'none'
+      return
+    }
+
+    canvas.style.display = 'block'
+
+    const dpr = window.devicePixelRatio || 1
+    const rect = canvasEl.getBoundingClientRect()
+    // Size the overlay canvas to match the Pixi canvas
+    const w = Math.ceil(rect.width)
+    const h = Math.ceil(rect.height)
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr
+      canvas.height = h * dpr
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${h}px`
+    }
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, w, h)
+
+    // Get tile radius in screen pixels
+    const viewport = useViewportStore.getState()
+    const tileSize = BASE_TILE_SIZE * viewport.zoom
+    const radius = brushSize - 1
+    const pixelRadius = radius * tileSize + tileSize / 2
+
+    const mx = mousePosRef.current.x
+    const my = mousePosRef.current.y
+
+    // Colours
+    const color = tool === 'water' ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.25)'
+    const strokeColor = tool === 'water' ? 'rgba(59,130,246,0.7)' : 'rgba(255,255,255,0.5)'
+
+    // Centre tile snapping
+    const snapX = Math.floor((mx - viewport.panX) / tileSize) * tileSize + tileSize / 2 + viewport.panX
+    const snapY = Math.floor((my - viewport.panY) / tileSize) * tileSize + tileSize / 2 + viewport.panY
+
+    ctx.save()
+    ctx.translate(snapX, snapY)
+
+    // Account for tile-size offset so the cursor aligns with where paint will land
+    // The brush paints centred on the tile, so we snap to tile centres.
+
+    if (brushShape === 'square') {
+      const half = pixelRadius
+      ctx.fillStyle = color
+      ctx.fillRect(-half, -half, half * 2, half * 2)
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(-half, -half, half * 2, half * 2)
+    } else if (brushShape === 'circle') {
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.arc(0, 0, pixelRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.arc(0, 0, pixelRadius, 0, Math.PI * 2)
+      ctx.stroke()
+    } else if (brushShape === 'triangle') {
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.moveTo(0, -pixelRadius)
+      ctx.lineTo(pixelRadius, pixelRadius)
+      ctx.lineTo(-pixelRadius, pixelRadius)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(0, -pixelRadius)
+      ctx.lineTo(pixelRadius, pixelRadius)
+      ctx.lineTo(-pixelRadius, pixelRadius)
+      ctx.closePath()
+      ctx.stroke()
+    } else if (brushShape === 'diamond') {
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.moveTo(0, -pixelRadius)
+      ctx.lineTo(pixelRadius, 0)
+      ctx.lineTo(0, pixelRadius)
+      ctx.lineTo(-pixelRadius, 0)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(0, -pixelRadius)
+      ctx.lineTo(pixelRadius, 0)
+      ctx.lineTo(0, pixelRadius)
+      ctx.lineTo(-pixelRadius, 0)
+      ctx.closePath()
+      ctx.stroke()
+    }
+
+    ctx.restore()
+  }, [])
+
+  // Schedules a brush preview redraw (coalesced via rAF)
+  const scheduleBrushPreviewRef = useRef<(() => void) | null>(null)
+
+  // Renders brush preview on mouse move using rAF
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    let rafId: number | null = null
+
+    // Shared function to schedule a redraw — used by both pointer events and store subscriptions
+    scheduleBrushPreviewRef.current = () => {
+      if (!isOverCanvasRef.current) return
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null
+          drawBrushPreview()
+        })
+      }
+    }
+
+    const onPointerMoveRaw = (e: PointerEvent) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+      isOverCanvasRef.current = true
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null
+          drawBrushPreview()
+        })
+      }
+    }
+
+    const onPointerLeaveRaw = () => {
+      isOverCanvasRef.current = false
+      const canvas = brushPreviewRef.current
+      if (canvas) canvas.style.display = 'none'
+    }
+
+    container.addEventListener('pointermove', onPointerMoveRaw)
+    container.addEventListener('pointerleave', onPointerLeaveRaw)
+    return () => {
+      container.removeEventListener('pointermove', onPointerMoveRaw)
+      container.removeEventListener('pointerleave', onPointerLeaveRaw)
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
+  }, [drawBrushPreview, canvasRef])
+
+  // Subscribe to editor store and viewport store so brush preview updates
+  // when brush size/shape or zoom changes — even without mouse move.
+  useEffect(() => {
+    const schedule = () => scheduleBrushPreviewRef.current?.()
+    const unsub1 = useEditorStore.subscribe(schedule)
+    const unsub2 = useViewportStore.subscribe(schedule)
+    // Also re-draw on the next rAF after mount to catch initial state
+    requestAnimationFrame(schedule)
+    return () => {
+      unsub1()
+      unsub2()
+    }
+  }, [])
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -760,6 +986,12 @@ export function PixiMapEditor() {
           pointerEvents: 'none',
           overflow: 'hidden',
         }}
+      />
+
+      {/* Brush preview overlay — draws the current brush shape under the cursor */}
+      <canvas
+        ref={brushPreviewRef}
+        className="brush-preview-canvas"
       />
 
       <div className="fps-counter" aria-label="Frames per second">
