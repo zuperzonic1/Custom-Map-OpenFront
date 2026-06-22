@@ -42,6 +42,40 @@ function pixelToTerrain(
 }
 
 // ---------------------------------------------------------------------------
+// Generic "any image" → terrain / magnitude mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts any RGBA pixel to terrain + magnitude using luminance.
+ *
+ * Luminance (0-255) determines both land/water and elevation:
+ *   - Pixels below `threshold` → water
+ *   - Pixels at or above `threshold` → land
+ *   - Land magnitude = luminance mapped to 0-255
+ *
+ * The threshold can be adjusted — 128 works well for typical images.
+ */
+function pixelToTerrainAny(
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  threshold = 128,
+): { terrain: 0 | 1; magnitude: number } {
+  // Water: transparent pixel
+  if (a < 20) return { terrain: 0, magnitude: 0 }
+
+  // Perceived luminance (ITU-R BT.601)
+  const luminance = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+
+  // Below threshold → water
+  if (luminance < threshold) return { terrain: 0, magnitude: 0 }
+
+  // Above threshold → land, magnitude = luminance
+  return { terrain: 1, magnitude: luminance }
+}
+
+// ---------------------------------------------------------------------------
 // BFS water magnitude — distance to nearest land tile (clamped to 255)
 // ---------------------------------------------------------------------------
 
@@ -96,17 +130,14 @@ function computeWaterMagnitude(
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Common image decoding helper
 // ---------------------------------------------------------------------------
 
-export class ImportError extends Error {}
-
-/**
- * Reads an image file, converts each pixel to terrain + magnitude using the
- * OpenFront blue-channel spec, then fills water-tile magnitude with BFS
- * distance to the nearest land tile.
- */
-export async function importImageAsProject(file: File): Promise<MapProject> {
+async function decodeImageFile(file: File): Promise<{
+  width: number
+  height: number
+  data: Uint8ClampedArray
+}> {
   let bitmap: ImageBitmap
   try {
     bitmap = await createImageBitmap(file)
@@ -127,7 +158,22 @@ export async function importImageAsProject(file: File): Promise<MapProject> {
   ctx.drawImage(bitmap, 0, 0)
   bitmap.close()
 
-  const { data } = ctx.getImageData(0, 0, width, height) // RGBA, 4 bytes/px
+  return { width, height, data: ctx.getImageData(0, 0, width, height).data }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export class ImportError extends Error {}
+
+/**
+ * Reads an image file, converts each pixel to terrain + magnitude using the
+ * OpenFront blue-channel spec, then fills water-tile magnitude with BFS
+ * distance to the nearest land tile.
+ */
+export async function importImageAsProject(file: File): Promise<MapProject> {
+  const { width, height, data } = await decodeImageFile(file)
 
   const terrain = new Uint8Array(width * height)
   const magnitude = new Uint8Array(width * height)
@@ -135,6 +181,45 @@ export async function importImageAsProject(file: File): Promise<MapProject> {
   for (let i = 0; i < width * height; i++) {
     const base = i * 4
     const result = pixelToTerrain(data[base], data[base + 1], data[base + 2], data[base + 3])
+    terrain[i] = result.terrain
+    magnitude[i] = result.magnitude
+  }
+
+  computeWaterMagnitude(terrain, magnitude, width, height)
+
+  const name = file.name.replace(/\.[^.]+$/, '') || 'Imported map'
+
+  return {
+    name,
+    width,
+    height,
+    terrain,
+    magnitude,
+    nations: [],
+    metadata: { author: '', description: '' },
+  }
+}
+
+/**
+ * Reads any image file and converts it to terrain + magnitude using pixel
+ * luminance (brightness). Pixels below a brightness threshold become water;
+ * brighter pixels become land with elevation proportional to brightness.
+ *
+ * This allows importing any photograph, illustration, or diagram as a map.
+ */
+export async function importImageAsAnyMap(file: File): Promise<MapProject> {
+  const { width, height, data } = await decodeImageFile(file)
+
+  const terrain = new Uint8Array(width * height)
+  const magnitude = new Uint8Array(width * height)
+
+  // Use Otsu's method to determine an adaptive threshold, or fall back to 128.
+  // For simplicity, we default to 128 which works for most well-exposed images.
+  const threshold = 128
+
+  for (let i = 0; i < width * height; i++) {
+    const base = i * 4
+    const result = pixelToTerrainAny(data[base], data[base + 1], data[base + 2], data[base + 3], threshold)
     terrain[i] = result.terrain
     magnitude[i] = result.magnitude
   }

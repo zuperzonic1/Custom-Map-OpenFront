@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './LandingPage.css'
 import { useEditorStore } from '../store/editorStore'
-import { importImageAsProject, ImportError } from '../lib/importMap'
+import { importImageAsProject, importImageAsAnyMap, ImportError } from '../lib/importMap'
 
 const FEATURES = [
   {
@@ -160,9 +160,23 @@ function NewMapPanel({ onEnterEditor }: { onEnterEditor: () => void }): React.Re
   )
 }
 
-// ── Import image panel ───────────────────────────────────────────────────────
+// ── Import image panels ─────────────────────────────────────────────────────
 
 function ImportMapPanel({ onEnterEditor }: { onEnterEditor: () => void }): React.ReactElement {
+  return (
+    <div className="configurator-panel">
+      <h3>Import image</h3>
+      <p className="configurator-panel-desc">
+        Choose how to interpret your image:
+      </p>
+      <ImportBlueChannel onEnterEditor={onEnterEditor} />
+      <div className="configurator-inner-divider"><span>or</span></div>
+      <ImportAnyImage onEnterEditor={onEnterEditor} />
+    </div>
+  )
+}
+
+function ImportBlueChannel({ onEnterEditor }: { onEnterEditor: () => void }): React.ReactElement {
   const [status, setStatus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -183,12 +197,11 @@ function ImportMapPanel({ onEnterEditor }: { onEnterEditor: () => void }): React
   }
 
   return (
-    <div className="configurator-panel">
-      <h3>Import image</h3>
+    <div className="import-option">
+      <h4>Blue channel map</h4>
       <p className="configurator-panel-desc">
-        Load a PNG, JPEG, or WebP — the blue channel encodes terrain elevation.
+        Uses the blue channel for precise elevation encoding (OpenFront spec).
       </p>
-
       <input
         ref={inputRef}
         type="file"
@@ -199,21 +212,69 @@ function ImportMapPanel({ onEnterEditor }: { onEnterEditor: () => void }): React
           if (file) void handleFile(file)
         }}
       />
-
       <button
         type="button"
-        className="cta-button"
+        className="cta-button cta-button-sm"
         disabled={busy}
         style={busy ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
         onClick={() => inputRef.current?.click()}
       >
         {busy ? 'Importing…' : 'Choose image →'}
       </button>
-
       {status && !status.startsWith('Imported') && (
-        <p className="pixel-over-error" style={{ marginTop: '10px' }}>
-          {status}
-        </p>
+        <p className="pixel-over-error" style={{ marginTop: '10px' }}>{status}</p>
+      )}
+    </div>
+  )
+}
+
+function ImportAnyImage({ onEnterEditor }: { onEnterEditor: () => void }): React.ReactElement {
+  const [status, setStatus] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleFile = async (file: File): Promise<void> => {
+    setBusy(true)
+    setStatus('Importing…')
+    try {
+      const project = await importImageAsAnyMap(file)
+      useEditorStore.getState().loadProject(project)
+      setStatus(`Imported "${project.name}" (${project.width}×${project.height})`)
+      onEnterEditor()
+    } catch (err) {
+      setStatus(err instanceof ImportError ? err.message : 'Import failed.')
+      setBusy(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="import-option">
+      <h4>Any image</h4>
+      <p className="configurator-panel-desc">
+        Converts any image into a map using pixel brightness for elevation.
+      </p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) void handleFile(file)
+        }}
+      />
+      <button
+        type="button"
+        className="cta-button cta-button-sm"
+        disabled={busy}
+        style={busy ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy ? 'Importing…' : 'Choose image →'}
+      </button>
+      {status && !status.startsWith('Imported') && (
+        <p className="pixel-over-error" style={{ marginTop: '10px' }}>{status}</p>
       )}
     </div>
   )
