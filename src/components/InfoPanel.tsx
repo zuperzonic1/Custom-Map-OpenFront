@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { useEditorStore } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
+import { importMetadataFromJson, ImportError } from '../lib/importMap'
 
 function flagUrl(code: string): string {
   return `https://flagcdn.com/w20/${code.toLowerCase()}.png`
@@ -121,9 +122,80 @@ function MetadataSection(): React.ReactElement {
   const setProjectName = useEditorStore((state) => state.setProjectName)
   // const setProjectMetadata = useEditorStore((state) => state.setProjectMetadata)
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [importing, setImporting] = React.useState(false)
+
+  const handleImportClick = (): void => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    try {
+      const metadata = await importMetadataFromJson(file)
+      // Replace nations in a single atomic update.
+      // Clone the current project and replace only the name + nations,
+      // then use loadProject() which handles texture rebuild + undo.
+      // Read the current project state, cloning frozen Immer arrays into
+      // fresh Uint8Arrays so loadProject can take ownership.
+      const current = useEditorStore.getState().project
+      const project = {
+        name: metadata.name,
+        width: current.width,
+        height: current.height,
+        terrain: new Uint8Array(current.terrain),
+        magnitude: new Uint8Array(current.magnitude),
+        metadata: { ...current.metadata },
+        nations: metadata.nations.map((n) => ({
+          id: n.id,
+          name: n.name,
+          countryCode: n.countryCode ?? '',
+          x: n.x,
+          y: n.y,
+        })),
+      }
+      useEditorStore.getState().loadProject(project)
+    } catch (err) {
+      if (err instanceof ImportError) {
+        window.alert(`Import failed:\n${err.message}`)
+      } else {
+        window.alert(`Import failed:\n${(err as Error).message ?? 'Unknown error'}`)
+      }
+    } finally {
+      setImporting(false)
+      // Reset the input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="panel-section">
-      <h3>Metadata</h3>
+      <div className="section-header-row">
+        <h3>Metadata</h3>
+        <button
+          type="button"
+          className="icon-btn import-btn"
+          onClick={handleImportClick}
+          disabled={importing}
+          title="Import JSON project file"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          style={{ display: 'none' }}
+          onChange={handleFileSelected}
+        />
+      </div>
       <label className="field">
         <span>Map Name</span>
         <input

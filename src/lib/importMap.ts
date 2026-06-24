@@ -238,3 +238,108 @@ export async function importImageAsAnyMap(file: File): Promise<MapProject> {
     metadata: { author: '', description: '' },
   }
 }
+
+/**
+ * Parsed metadata from a JSON file (name + nations only — no terrain data).
+ */
+export type ImportedMetadata = {
+  name: string
+  nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }>
+}
+
+/**
+ * Reads a JSON file containing map metadata (name + nations) and returns it.
+ * This is intended for importing export-style info.json files that contain
+ * just the project name and nation placements.
+ *
+ * Expected JSON format:
+ * ```json
+ * {
+ *   "name": "My Map",
+ *   "nations": [
+ *     { "coordinates": [322, 269], "flag": "", "name": "Jolly Ninjas" },
+ *     ...
+ *   ]
+ * }
+ * ```
+ *
+ * Nation entries may use either the editor's `{ id, name, countryCode, x, y }`
+ * format or the export's `{ coordinates, flag, name }` format.
+ */
+export async function importMetadataFromJson(file: File): Promise<ImportedMetadata> {
+  let parsed: unknown
+  try {
+    const text = await file.text()
+    parsed = JSON.parse(text)
+  } catch {
+    throw new ImportError('Could not parse file as JSON. Make sure it is a valid .json file.')
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new ImportError('Invalid file: expected a JSON object with "name" and optional "nations".')
+  }
+
+  const obj = parsed as Record<string, unknown>
+
+  if (typeof obj.name !== 'string') {
+    throw new ImportError('Invalid file: missing or invalid "name" field.')
+  }
+
+  const nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }> = []
+
+  if (obj.nations !== undefined) {
+    if (!Array.isArray(obj.nations)) {
+      throw new ImportError('Invalid file: "nations" must be an array.')
+    }
+
+    for (let i = 0; i < obj.nations.length; i++) {
+      const n = obj.nations[i]
+      if (!n || typeof n !== 'object') {
+        throw new ImportError(`Invalid file: nations[${i}] is not an object.`)
+      }
+
+      const entry = n as Record<string, unknown>
+
+      // Support both the editor format { id, name, countryCode, x, y }
+      // and the export format { coordinates: [x, y], flag, name }
+      let x: number | undefined
+      let y: number | undefined
+      let name: string | undefined
+      let countryCode: string | undefined
+      let id: string | undefined
+
+      if (Array.isArray(entry.coordinates) && entry.coordinates.length >= 2) {
+        x = entry.coordinates[0]
+        y = entry.coordinates[1]
+      } else if (typeof entry.x === 'number' && typeof entry.y === 'number') {
+        x = entry.x
+        y = entry.y
+      }
+
+      if (typeof entry.name === 'string') name = entry.name
+      if (typeof entry.flag === 'string') countryCode = entry.flag.toUpperCase()
+      if (typeof entry.countryCode === 'string') countryCode = entry.countryCode
+      if (typeof entry.id === 'string') id = entry.id
+
+      if (x === undefined || y === undefined) {
+        throw new ImportError(
+          `Invalid file: nations[${i}] is missing coordinates. Expected "coordinates" ([x, y]) or "x" and "y" fields.`,
+        )
+      }
+
+      if (!name || !name.trim()) {
+        throw new ImportError(`Invalid file: nations[${i}] is missing a valid "name".`)
+      }
+
+      nations.push({
+        id: id ?? `nation-import-${Date.now()}-${i}`,
+        name,
+        countryCode: countryCode ?? '',
+        x,
+        y,
+      })
+    }
+  }
+
+  return { name: obj.name as string, nations }
+}
