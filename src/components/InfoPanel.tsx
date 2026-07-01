@@ -370,7 +370,6 @@ function NationsSection({
   const removeAllNations = useEditorStore((state) => state.removeAllNations)
 
   const [showEditor, setShowEditor] = React.useState(false)
-  const [searchQuery, setSearchQuery] = React.useState('')
   return (
     <div className="panel-section">
       <div className="nations-section-header">
