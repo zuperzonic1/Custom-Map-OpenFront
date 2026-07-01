@@ -154,7 +154,14 @@ export type Nation = {
 export type MapMetadata = {
   author: string
   description: string
+  id: string
+  translation_key: string
+  categories: string[]
+  multiplayer_frequency: number
 }
+
+/** Keys of MapMetadata whose values are simple strings */
+export type MapMetadataStringKey = 'author' | 'description' | 'id' | 'translation_key'
 
 export type MapProject = {
   name: string
@@ -209,12 +216,15 @@ type EditorStoreState = {
   confirmNationPlacement: () => void
   cancelNationPlacement: () => void
   removeNation: (nationId: string) => void
+  updateNation: (nationId: string, updates: Partial<Pick<Nation, 'name' | 'countryCode' | 'x' | 'y'>>) => void
   removeAllNations: () => void
   autoAddNations: (count: number, useFlags?: boolean) => void
   undo: () => void
   redo: () => void
   setProjectName: (name: string) => void
-  setProjectMetadata: (key: keyof MapMetadata, value: string) => void
+  setProjectMetadata: (key: MapMetadataStringKey, value: string) => void
+  setProjectCategories: (categories: string[]) => void
+  setProjectMultiplayerFrequency: (frequency: number) => void
   loadProject: (project: MapProject) => void
 }
 
@@ -227,7 +237,7 @@ function createBlankTerrain(width: number, height: number) {
 
 function createBlankProject(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT): MapProject {
   return {
-    name: 'Untitled map',
+    name: '',
     width,
     height,
     terrain: createBlankTerrain(width, height),
@@ -236,6 +246,10 @@ function createBlankProject(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT): Map
     metadata: {
       author: '',
       description: '',
+      id: '',
+      translation_key: '',
+      categories: [],
+      multiplayer_frequency: 4,
     },
   }
 }
@@ -269,9 +283,13 @@ function deserializeProject(project: SerializedProject | MapProject): MapProject
       ...nation,
       countryCode: nation.countryCode ?? '',
     })),
-    metadata: project.metadata ?? {
-      author: '',
-      description: '',
+    metadata: {
+      author: project.metadata?.author ?? '',
+      description: project.metadata?.description ?? '',
+      id: project.metadata?.id ?? '',
+      translation_key: project.metadata?.translation_key ?? '',
+      categories: project.metadata?.categories ?? [],
+      multiplayer_frequency: project.metadata?.multiplayer_frequency ?? 4,
     },
   }
 }
@@ -527,6 +545,19 @@ export const useEditorStore = create<EditorStoreState>()(
           state.renderRevision = (state.renderRevision ?? 0) + 1
         })
       },
+      updateNation: (nationId, updates) => {
+        const { project } = useEditorStore.getState()
+        useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
+        set((state) => {
+          const nation = state.project.nations.find((n) => n.id === nationId)
+          if (!nation) return
+          if (updates.name !== undefined) nation.name = updates.name
+          if (updates.countryCode !== undefined) nation.countryCode = updates.countryCode
+          if (updates.x !== undefined) nation.x = updates.x
+          if (updates.y !== undefined) nation.y = updates.y
+          state.renderRevision = (state.renderRevision ?? 0) + 1
+        })
+      },
       removeAllNations: () => {
         const { project } = useEditorStore.getState()
         useUndoStore.getState().push(project.terrain, project.magnitude, project.nations, _landTileCount)
@@ -665,6 +696,14 @@ export const useEditorStore = create<EditorStoreState>()(
       setProjectMetadata: (key, value) =>
         set((state) => {
           state.project.metadata[key] = value
+        }),
+      setProjectCategories: (categories) =>
+        set((state) => {
+          state.project.metadata.categories = categories
+        }),
+      setProjectMultiplayerFrequency: (frequency) =>
+        set((state) => {
+          state.project.metadata.multiplayer_frequency = frequency
         }),
       loadProject: (project) => {
         buildMapTexture(project)

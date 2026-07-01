@@ -1,5 +1,11 @@
 import type { MapProject } from '../store/editorStore'
 
+const VALID_CATEGORIES = [
+  'new', 'featured', 'continental', 'world', 'europe', 'asia',
+  'north_america', 'africa', 'south_america', 'oceania', 'antarctica',
+  'countries', 'cosmic', 'tournament', 'fictional', 'arcade',
+]
+
 // ---------------------------------------------------------------------------
 // Blue-channel → terrain / magnitude mapping
 // (follows the OpenFront terrain generator spec)
@@ -196,7 +202,7 @@ export async function importImageAsProject(file: File): Promise<MapProject> {
     terrain,
     magnitude,
     nations: [],
-    metadata: { author: '', description: '' },
+    metadata: { author: '', description: '', id: '', translation_key: '', categories: [], multiplayer_frequency: 4 },
   }
 }
 
@@ -235,15 +241,19 @@ export async function importImageAsAnyMap(file: File): Promise<MapProject> {
     terrain,
     magnitude,
     nations: [],
-    metadata: { author: '', description: '' },
+    metadata: { author: '', description: '', id: '', translation_key: '', categories: [], multiplayer_frequency: 4 },
   }
 }
 
 /**
- * Parsed metadata from a JSON file (name + nations only — no terrain data).
+ * Parsed metadata from a JSON file (name, metadata, and nations only — no terrain data).
  */
 export type ImportedMetadata = {
   name: string
+  id: string
+  translation_key: string
+  categories: string[]
+  multiplayer_frequency: number
   nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }>
 }
 
@@ -255,7 +265,11 @@ export type ImportedMetadata = {
  * Expected JSON format:
  * ```json
  * {
- *   "name": "My Map",
+ *   "id": "MySampleMap",
+ *   "name": "My Sample Map",
+ *   "translation_key": "map.mysamplemap",
+ *   "categories": ["europe"],
+ *   "multiplayer_frequency": 4,
  *   "nations": [
  *     { "coordinates": [322, 269], "flag": "", "name": "Jolly Ninjas" },
  *     ...
@@ -283,6 +297,19 @@ export async function importMetadataFromJson(file: File): Promise<ImportedMetada
 
   if (typeof obj.name !== 'string') {
     throw new ImportError('Invalid file: missing or invalid "name" field.')
+  }
+
+  // Parse new metadata fields
+  const id = typeof obj.id === 'string' ? obj.id : ''
+  const translation_key = typeof obj.translation_key === 'string' ? obj.translation_key : ''
+  const multiplayer_frequency = typeof obj.multiplayer_frequency === 'number' ? obj.multiplayer_frequency : 4
+
+  // Parse categories — validate each against the allowed list
+  let categories: string[] = []
+  if (Array.isArray(obj.categories)) {
+    categories = obj.categories.filter(
+      (c): c is string => typeof c === 'string' && (VALID_CATEGORIES as readonly string[]).includes(c),
+    )
   }
 
   const nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }> = []
@@ -341,5 +368,8 @@ export async function importMetadataFromJson(file: File): Promise<ImportedMetada
     }
   }
 
-  return { name: obj.name as string, nations }
+  return { name: obj.name as string, id, translation_key, categories, multiplayer_frequency, nations }
 }
+
+/** Allowed values for the `categories` field in info.json */
+export { VALID_CATEGORIES }

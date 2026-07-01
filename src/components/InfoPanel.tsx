@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from 'react'
 import { useEditorStore } from '../store/editorStore'
 import { useViewportStore } from '../store/viewportStore'
-import { importMetadataFromJson, ImportError } from '../lib/importMap'
+import { importMetadataFromJson, ImportError, VALID_CATEGORIES } from '../lib/importMap'
 
-function flagUrl(code: string): string {
-  return `https://flagcdn.com/w20/${code.toLowerCase()}.png`
+function flagUrl(code: string, width: 20 | 40 = 20): string {
+  return `https://flagcdn.com/w${width}/${code.toLowerCase()}.png`
 }
 
 export interface InfoPanelProps {
@@ -115,12 +115,30 @@ function MetaTabContent(): React.ReactElement {
   )
 }
 
+function autoFillFromName(name: string, metadata: { id: string; translation_key: string }): void {
+  const trimmed = name.trim()
+  if (!trimmed) return
+
+  const setProjectMetadata = useEditorStore.getState().setProjectMetadata
+
+  if (!metadata.id) {
+    setProjectMetadata('id', trimmed.replace(/\s+/g, ''))
+  }
+  if (!metadata.translation_key) {
+    setProjectMetadata('translation_key', `map.${trimmed.replace(/\s+/g, '').toLowerCase()}`)
+  }
+}
+
 function MetadataSection(): React.ReactElement {
   const projectName = useEditorStore((state) => state.project.name)
-  // const projectMetadataAuthor = useEditorStore((state) => state.project.metadata.author)
-  // const projectMetadataDescription = useEditorStore((state) => state.project.metadata.description)
+  const metadataId = useEditorStore((state) => state.project.metadata.id)
+  const metadataTranslationKey = useEditorStore((state) => state.project.metadata.translation_key)
+  const metadataCategories = useEditorStore((state) => state.project.metadata.categories)
+  const metadataMultiplayerFrequency = useEditorStore((state) => state.project.metadata.multiplayer_frequency)
   const setProjectName = useEditorStore((state) => state.setProjectName)
-  // const setProjectMetadata = useEditorStore((state) => state.setProjectMetadata)
+  const setProjectMetadata = useEditorStore((state) => state.setProjectMetadata)
+  const setProjectCategories = useEditorStore((state) => state.setProjectCategories)
+  const setProjectMultiplayerFrequency = useEditorStore((state) => state.setProjectMultiplayerFrequency)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importing, setImporting] = React.useState(false)
@@ -148,7 +166,13 @@ function MetadataSection(): React.ReactElement {
         height: current.height,
         terrain: new Uint8Array(current.terrain),
         magnitude: new Uint8Array(current.magnitude),
-        metadata: { ...current.metadata },
+        metadata: {
+          ...current.metadata,
+          id: metadata.id,
+          translation_key: metadata.translation_key,
+          categories: metadata.categories,
+          multiplayer_frequency: metadata.multiplayer_frequency,
+        },
         nations: metadata.nations.map((n) => ({
           id: n.id,
           name: n.name,
@@ -201,26 +225,57 @@ function MetadataSection(): React.ReactElement {
         <input
           value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
+          onBlur={() => autoFillFromName(projectName, { id: metadataId, translation_key: metadataTranslationKey })}
           placeholder="Map name"
         />
       </label>
-      {/* <label className="field" style={{ marginTop: 6 }}>
-        <span>Author</span>
+      <label className="field" style={{ marginTop: 6 }}>
+        <span>ID</span>
         <input
-          value={projectMetadataAuthor}
-          onChange={(event) => setProjectMetadata('author', event.target.value)}
-          placeholder="Author name"
+          value={metadataId}
+          onChange={(event) => setProjectMetadata('id', event.target.value)}
+          placeholder="map-id (no spaces)"
         />
       </label>
       <label className="field" style={{ marginTop: 6 }}>
-        <span>Description</span>
-        <textarea
-          value={projectMetadataDescription}
-          onChange={(event) => setProjectMetadata('description', event.target.value)}
-          placeholder="Map description"
-          rows={3}
+        <span>Translation Key</span>
+        <input
+          value={metadataTranslationKey}
+          onChange={(event) => setProjectMetadata('translation_key', event.target.value)}
+          placeholder="map.mapname"
         />
-      </label> */}
+      </label>
+      <label className="field" style={{ marginTop: 6 }}>
+        <span>Multiplayer Frequency</span>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          value={metadataMultiplayerFrequency}
+          onChange={(event) => setProjectMultiplayerFrequency(Math.max(1, Math.min(10, Math.floor(Number(event.target.value)) || 4)))}
+        />
+      </label>
+      <label className="field" style={{ marginTop: 6 }}>
+        <span>Categories</span>
+        <div className="categories-tags">
+          {VALID_CATEGORIES.map((cat) => (
+            <label key={cat} className="category-chip">
+              <input
+                type="checkbox"
+                checked={metadataCategories.includes(cat)}
+                onChange={() => {
+                  if (metadataCategories.includes(cat)) {
+                    setProjectCategories(metadataCategories.filter((c) => c !== cat))
+                  } else {
+                    setProjectCategories([...metadataCategories, cat])
+                  }
+                }}
+              />
+              <span>{cat.replace(/_/g, ' ')}</span>
+            </label>
+          ))}
+        </div>
+      </label>
     </div>
   )
 }
@@ -250,27 +305,95 @@ function ProjectInfoPanel({ width, height }: { width: number; height: number }):
   )
 }
 
+// ─── Country codes list (reused from EditorPage) ──────────────────────────────
+const COUNTRY_CODES = [
+  'AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AW', 'AX', 'AZ',
+  'BA', 'BB', 'BD', 'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS',
+  'BT', 'BV', 'BW', 'BY', 'BZ',
+  'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW',
+  'CX', 'CY', 'CZ',
+  'DE', 'DJ', 'DK', 'DM', 'DO', 'DZ',
+  'EC', 'EE', 'EG', 'EH', 'ER', 'ES', 'ET',
+  'FI', 'FJ', 'FK', 'FM', 'FO', 'FR',
+  'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 'GQ', 'GR', 'GS', 'GT',
+  'GU', 'GW', 'GY',
+  'HK', 'HM', 'HN', 'HR', 'HT', 'HU',
+  'ID', 'IE', 'IL', 'IM', 'IN', 'IO', 'IQ', 'IR', 'IS', 'IT',
+  'JE', 'JM', 'JO', 'JP',
+  'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ',
+  'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LT', 'LU', 'LV', 'LY',
+  'MA', 'MC', 'MD', 'ME', 'MF', 'MG', 'MH', 'MK', 'ML', 'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS',
+  'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ',
+  'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ',
+  'OM',
+  'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN', 'PR', 'PS', 'PT', 'PW', 'PY',
+  'QA',
+  'RE', 'RO', 'RS', 'RU', 'RW',
+  'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH', 'SI', 'SJ', 'SK', 'SL', 'SM', 'SN', 'SO', 'SR', 'SS',
+  'ST', 'SV', 'SX', 'SY', 'SZ',
+  'TC', 'TD', 'TF', 'TG', 'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TR', 'TT', 'TV', 'TW', 'TZ',
+  'UA', 'UG', 'UM', 'US', 'UY', 'UZ',
+  'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU',
+  'WF', 'WS',
+  'YE', 'YT',
+  'ZA', 'ZM', 'ZW',
+] as const
+
+const GOOFY_ADJECTIVES = [
+  'Mighty', 'Chunky', 'Wobbly', 'Spicy', 'Soggy', 'Turbo', 'Legendary', 'Fluffy',
+  'Cosmic', 'Sneaky', 'Grumpy', 'Crispy', 'Fancy', 'Funky', 'Grand', 'Mystical',
+  'Radical', 'Saucy', 'Supreme', 'Wacky', 'Rusty', 'Glamorous', 'Cursed', 'Ancient',
+  'Electric', 'Feral', 'Hollow', 'Infinite', 'Jolly', 'Knightly',
+]
+
+const GOOFY_NOUNS = [
+  'Penguins', 'Narwhals', 'Potatoes', 'Wombats', 'Ducks', 'Llamas', 'Muffins',
+  'Pickles', 'Bananas', 'Noodles', 'Beavers', 'Donkeys', 'Rascals', 'Yetis',
+  'Goblins', 'Badgers', 'Toads', 'Vikings', 'Wizards', 'Ninjas', 'Sloths',
+  'Hedgehogs', 'Axolotls', 'Capybaras', 'Platypuses', 'Corgis', 'Ferrets',
+  'Salamanders', 'Krakens', 'Parrots',
+]
+
+function generateGoofyName(): string {
+  const adj = GOOFY_ADJECTIVES[Math.floor(Math.random() * GOOFY_ADJECTIVES.length)]
+  const noun = GOOFY_NOUNS[Math.floor(Math.random() * GOOFY_NOUNS.length)]
+  return `${adj} ${noun}`
+}
+
 function NationsSection({
   nations,
 }: {
   nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }>
 }): React.ReactElement {
   const removeNation = useEditorStore((state) => state.removeNation)
+  const updateNation = useEditorStore((state) => state.updateNation)
   const removeAllNations = useEditorStore((state) => state.removeAllNations)
 
+  const [showEditor, setShowEditor] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState('')
   return (
     <div className="panel-section">
       <div className="nations-section-header">
         <h3>Nations</h3>
         {nations.length > 0 && (
-          <button
-            type="button"
-            className="nation-remove-all-btn"
-            onClick={removeAllNations}
-            title="Remove all nations"
-          >
-            Remove all
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              type="button"
+              className="nation-edit-all-btn"
+              onClick={() => setShowEditor(true)}
+              title="Open nation editor"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className="nation-remove-all-btn"
+              onClick={removeAllNations}
+              title="Remove all nations"
+            >
+              Remove all
+            </button>
+          </div>
         )}
       </div>
 
@@ -309,6 +432,245 @@ function NationsSection({
           ))}
         </ul>
       )}
+
+      {showEditor && (
+        <NationEditorModal
+          nations={nations}
+          onUpdate={updateNation}
+          onRemove={removeNation}
+          onClose={() => { setShowEditor(false); setSearchQuery('') }}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Expanded nation editor modal with search, inline editing, and all controls.
+ */
+function NationEditorModal({
+  nations,
+  onUpdate,
+  onRemove,
+  onClose,
+}: {
+  nations: Array<{ id: string; name: string; countryCode?: string; x: number; y: number }>
+  onUpdate: (id: string, updates: Partial<{ name: string; countryCode: string; x: number; y: number }>) => void
+  onRemove: (id: string) => void
+  onClose: () => void
+}): React.ReactElement {
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [editName, setEditName] = React.useState('')
+  const [editCountryCode, setEditCountryCode] = React.useState('')
+
+  const filtered = searchQuery.trim()
+    ? nations.filter((n) => n.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : nations
+
+  const startEdit = (nation: typeof nations[number]) => {
+    setEditingId(nation.id)
+    setEditName(nation.name)
+    setEditCountryCode(nation.countryCode ?? '')
+  }
+
+  const saveEdit = () => {
+    if (editingId && editName.trim()) {
+      onUpdate(editingId, { name: editName.trim(), countryCode: editCountryCode })
+    }
+    setEditingId(null)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="nation-modal" role="dialog" aria-modal="true" aria-labelledby="nation-editor-title">
+        <button
+          type="button"
+          className="nation-modal-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ×
+        </button>
+
+        <h2 id="nation-editor-title">Nation Editor</h2>
+        <p>Search, edit, or remove nations.</p>
+
+        {/* Search bar */}
+        <input
+          className="nation-editor-search"
+          type="text"
+          placeholder="Search nations..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            border: '1px solid var(--line)',
+            borderRadius: 10,
+            color: 'var(--text-strong)',
+            background: 'rgba(2, 6, 23, 0.45)',
+            fontSize: 13,
+            marginBottom: 12,
+            boxSizing: 'border-box',
+          }}
+        />
+
+        {/* Nation list */}
+        <div className="nations-list" style={{ maxHeight: 300, overflowY: 'auto' }}>
+          {filtered.length === 0 ? (
+            <p className="empty-state" style={{ textAlign: 'center', padding: 12 }}>
+              {searchQuery ? 'No nations match your search.' : 'No nations placed yet.'}
+            </p>
+          ) : (
+            filtered.map((nation) => {
+              const isEditing = editingId === nation.id
+              return (
+                <div key={nation.id} className="nation-row" style={{ marginBottom: 6 }}>
+                  {isEditing ? (
+                    // Editing mode
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div className="nation-name-row" style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          placeholder="Nation name"
+                          style={{
+                            flex: 1,
+                            padding: '6px 8px',
+                            border: '1px solid var(--line)',
+                            borderRadius: 8,
+                            color: 'var(--text-strong)',
+                            background: 'rgba(2, 6, 23, 0.45)',
+                            fontSize: 12,
+                            minWidth: 0,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="secondary name-random-btn"
+                          onClick={() => setEditName(generateGoofyName())}
+                          title="Random name"
+                          style={{ fontSize: 14, padding: '4px 8px' }}
+                        >
+                          🎲
+                        </button>
+                      </div>
+                      <div className="flag-select-row" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {editCountryCode ? (
+                          <img
+                            className="flag-preview"
+                            src={flagUrl(editCountryCode, 40)}
+                            alt={editCountryCode}
+                            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                            onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
+                            style={{ width: 30, height: 20, borderRadius: 2 }}
+                          />
+                        ) : (
+                          <div className="flag-preview-empty" style={{ width: 30, height: 20 }} />
+                        )}
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() =>
+                            setEditCountryCode(COUNTRY_CODES[Math.floor(Math.random() * COUNTRY_CODES.length)])
+                          }
+                          title="Random flag"
+                          style={{ fontSize: 14, padding: '4px 8px' }}
+                        >
+                          🎲
+                        </button>
+                        <select
+                          value={editCountryCode}
+                          onChange={(e) => setEditCountryCode(e.target.value)}
+                          style={{
+                            flex: 1,
+                            padding: '6px 8px',
+                            border: '1px solid var(--line)',
+                            borderRadius: 8,
+                            color: 'var(--text-strong)',
+                            background: 'rgba(2, 6, 23, 0.45)',
+                            fontSize: 12,
+                          }}
+                        >
+                          <option value="">— No flag —</option>
+                          {COUNTRY_CODES.map((code) => (
+                            <option key={code} value={code}>{code}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        <button type="button" className="secondary" onClick={cancelEdit} style={{ fontSize: 11, padding: '3px 8px' }}>
+                          Cancel
+                        </button>
+                        <button type="button" className="primary" onClick={saveEdit} style={{ fontSize: 11, padding: '3px 8px' }}>
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // Display mode
+                    <>
+                      <div className="nation-row-info">
+                        {nation.countryCode ? (
+                          <img
+                            className="nation-flag"
+                            src={flagUrl(nation.countryCode)}
+                            alt={nation.countryCode}
+                            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                            onLoad={(e) => { e.currentTarget.style.visibility = 'visible' }}
+                          />
+                        ) : (
+                          <div className="nation-flag nation-flag-placeholder" />
+                        )}
+                        <div>
+                          <strong>{nation.name}</strong>
+                          <span>{nation.x}, {nation.y}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => startEdit(nation)}
+                          style={{ fontSize: 11, padding: '3px 7px' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="nation-remove-btn"
+                          onClick={() => onRemove(nation.id)}
+                          style={{ fontSize: 14, padding: '3px 7px' }}
+                          aria-label="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="nation-modal-actions" style={{ marginTop: 12 }}>
+          <button type="button" className="secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

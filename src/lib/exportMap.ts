@@ -3,7 +3,7 @@
  *
  * Simplified export: produces a .zip containing:
  *   map.png      – the full-resolution map image (1 px per tile)
- *   info.json    – project name and nation data
+ *   info.json    – project name, metadata, and nation data
  */
 
 import { zipSync, strToU8 } from 'fflate'
@@ -41,8 +41,12 @@ export async function buildExportBundle(project: MapProject): Promise<ExportBund
   const mapBuffer = new Uint8Array(await mapBlob.arrayBuffer())
 
   // ── info.json ──
-  const info = {
+  const info: Record<string, unknown> = {
+    id: project.metadata.id || project.name.replace(/\s+/g, ''),
     name: project.name,
+    translation_key: project.metadata.translation_key || `map.${project.name.replace(/\s+/g, '').toLowerCase()}`,
+    categories: project.metadata.categories.length > 0 ? project.metadata.categories : ['fictional'],
+    multiplayer_frequency: project.metadata.multiplayer_frequency,
     nations: project.nations.map((n) => ({
       coordinates: [n.x, n.y] as [number, number],
       flag: n.countryCode ? n.countryCode.toLowerCase() : '',
