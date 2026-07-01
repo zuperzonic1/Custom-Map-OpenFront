@@ -437,7 +437,7 @@ function NationsSection({
           nations={nations}
           onUpdate={updateNation}
           onRemove={removeNation}
-          onClose={() => { setShowEditor(false); setSearchQuery('') }}
+          onClose={() => setShowEditor(false)}
         />
       )}
     </div>
