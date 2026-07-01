@@ -100,15 +100,12 @@ export function InfoPanel({
 }
 
 function MetaTabContent(): React.ReactElement {
-  const projectWidth = useEditorStore((state) => state.project.width)
-  const projectHeight = useEditorStore((state) => state.project.height)
   const projectNations = useEditorStore((state) => state.project.nations)
   const tool = useEditorStore((state) => state.tool)
 
   return (
     <>
       <MetadataSection />
-      <ProjectInfoPanel width={projectWidth} height={projectHeight} />
       <NationsSection nations={projectNations} />
       {tool === 'nation' && <NationHelp />}
     </>
@@ -280,30 +277,6 @@ function MetadataSection(): React.ReactElement {
   )
 }
 
-function ProjectInfoPanel({ width, height }: { width: number; height: number }): React.ReactElement {
-  const projectNations = useEditorStore((state) => state.project.nations)
-  const landTileCount = useEditorStore((state) => state.landTileCount)
-
-  return (
-    <div className="panel-section project-info">
-      <h3>Project</h3>
-      <dl>
-        <div>
-          <dt>Total tiles</dt>
-          <dd>{(width * height).toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Land tiles</dt>
-          <dd>{landTileCount.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Nations</dt>
-          <dd>{projectNations.length}</dd>
-        </div>
-      </dl>
-    </div>
-  )
-}
 
 // ─── Country codes list (reused from EditorPage) ──────────────────────────────
 const COUNTRY_CODES = [
@@ -967,7 +940,12 @@ function MapSizePanel({
       <button
         type="button"
         className="primary"
-        onClick={() => useEditorStore.getState().createBlankProject(nextWidth, nextHeight)}
+        onClick={() => {
+          const confirmed = window.confirm('Are you sure you want to create a new blank map? All unsaved changes on your current map will be lost.')
+          if (confirmed) {
+            useEditorStore.getState().createBlankProject(nextWidth, nextHeight)
+          }
+        }}
         style={{ width: '100%' }}
       >
         Create blank map
