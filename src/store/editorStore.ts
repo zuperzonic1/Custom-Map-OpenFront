@@ -34,7 +34,7 @@ let _paintStartTime = 0
  */
 let _isUndoRedoInProgress = false
 
-function countLandTiles(terrain: Uint8Array): number {
+export function countLandTiles(terrain: Uint8Array): number {
   let n = 0
   for (let i = 0; i < terrain.length; i++) {
     if (terrain[i] === 1) n++
@@ -119,7 +119,7 @@ function isTileInBrushShape(dx: number, dy: number, radius: number, shape: Brush
 }
 
 // Helper to serialize Uint8Array to base64 for efficient localStorage storage
-function typedArrayToBase64(arr: Uint8Array): string {
+export function typedArrayToBase64(arr: Uint8Array): string {
   // Use Blob + FileReader-free path: btoa on chunked binary string
   // Chunk to avoid call-stack overflow on large arrays
   const CHUNK = 8192
@@ -131,7 +131,7 @@ function typedArrayToBase64(arr: Uint8Array): string {
 }
 
 // Helper to deserialize base64 to Uint8Array
-function base64ToTypedArray(base64: string): Uint8Array {
+export function base64ToTypedArray(base64: string): Uint8Array {
   const binaryString = atob(base64)
   const len = binaryString.length
   const arr = new Uint8Array(len)

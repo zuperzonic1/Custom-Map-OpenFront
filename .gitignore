@@ -29,7 +29,3 @@ dist-ssr
 # Cline
 .cline
 
-# Cypress outputs
-cypress/screenshots
-cypress/videos
-cypress/downloads

@@ -452,7 +452,6 @@ Completed
 5. Implement thumbnail generation from the canvas state
 6. Package export artifacts into a ZIP file
 7. Wire export controls into the UI
-8. Add Cypress coverage for generation and export flows
 
 #### Acceptance criteria
 - A user can export an OpenFront-ready map package from the browser

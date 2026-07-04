@@ -58,18 +58,10 @@ This creates an optimized production build in the `dist/` directory.
 npm run preview
 ```
 
-### Running Tests
-```bash
-npm run test
-```
-
 ## Project Structure
 
 ```
 Custom-Map-OpenFront/
-├── cypress/                    # End-to-end test files and configuration
-│   ├── downloads/             # Test download outputs
-│   └── screenshots/           # Test screenshots
 ├── dist/                      # Production build output (generated)
 ├── public/                    # Static assets
 │   ├── favicon.svg           # Application icon
@@ -99,18 +91,7 @@ Custom-Map-OpenFront/
 │   ├── App.css               # Global application styles
 │   ├── index.css             # Base styles and CSS variables
 │   └── main.tsx              # Application entry point
-├── tests/                     # Cypress E2E tests
-│   ├── brush.cy.js           # Brush tool tests
-│   ├── editor.cy.js          # Editor functionality tests
-│   ├── elevation.cy.js       # Elevation control tests
-│   ├── export.cy.js          # Export functionality tests
-│   ├── metadata.cy.js        # Metadata handling tests
-│   ├── nations.cy.js         # Nation management tests
-│   ├── performance.cy.js     # Performance benchmarks
-│   ├── size.cy.js            # Map size tests
-│   └── tools.cy.js           # Tool switching tests
 ├── .gitignore                # Git ignore rules
-├── cypress.config.js         # Cypress test configuration
 ├── eslint.config.js          # ESLint configuration
 ├── index.html                # HTML entry point
 ├── package.json              # Project dependencies and scripts
@@ -146,7 +127,6 @@ Custom-Map-OpenFront/
 - **PixiJS** - Hardware-accelerated 2D rendering
 - **Zustand** - Lightweight state management
 - **Immer** - Immutable state updates
-- **Cypress** - End-to-end testing
 
 ## Architecture Notes
 

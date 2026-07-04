@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import '../App.css'
 import { buildExportBundle, downloadBlob } from '../lib/exportMap'
 import { useEditorStore } from '../store/editorStore'
+import { useProjectManagerStore } from '../store/projectManagerStore'
 import { PixiMapEditor as PixiCanvas } from '../lib/pixiMapRenderer'
 import { ControlsPanel } from '../components/ControlsPanel'
 import { InfoPanel } from '../components/InfoPanel'
@@ -71,7 +72,11 @@ const COUNTRY_CODES = [
 
 export function EditorPage(): React.ReactElement {
   const navigate = useNavigate()
-  const onGoHome = () => navigate('/')
+  const onGoHome = () => {
+    // Save current project before navigating away
+    useProjectManagerStore.getState().saveCurrentProject()
+    navigate('/')
+  }
 
   const projectWidth = useEditorStore((state) => state.project.width)
   const projectHeight = useEditorStore((state) => state.project.height)

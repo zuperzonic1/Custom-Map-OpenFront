@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useEditorStore } from '../store/editorStore'
+import { useProjectManagerStore } from '../store/projectManagerStore'
 
 /** Inline eyedropper/pipette SVG icon. */
 function EyedropperIcon() {
@@ -87,6 +88,34 @@ export function ControlsPanel({
     return () => window.removeEventListener('pointerdown', handler)
   }, [confirmReset])
 
+  const projectName = useEditorStore((state) => state.project.name)
+  const projects = useProjectManagerStore((state) => state.projects)
+  const activeProjectId = useProjectManagerStore((state) => state.activeProjectId)
+  const loadProject = useProjectManagerStore((state) => state.loadProject)
+  const saveCurrentProject = useProjectManagerStore((state) => state.saveCurrentProject)
+  const [showProjectSwitcher, setShowProjectSwitcher] = useState(false)
+  const projectSwitcherRef = useRef<HTMLDivElement>(null)
+
+  // Close project switcher on outside click
+  useEffect(() => {
+    if (!showProjectSwitcher) return
+    const handler = (e: PointerEvent) => {
+      if (projectSwitcherRef.current && !projectSwitcherRef.current.contains(e.target as Node)) {
+        setShowProjectSwitcher(false)
+      }
+    }
+    setTimeout(() => window.addEventListener('pointerdown', handler), 0)
+    return () => window.removeEventListener('pointerdown', handler)
+  }, [showProjectSwitcher])
+
+  const handleSwitchProject = (id: string) => {
+    if (id !== activeProjectId) {
+      saveCurrentProject()
+      loadProject(id)
+    }
+    setShowProjectSwitcher(false)
+  }
+
   return (
     <header className="toolbar">
       {/* Brand */}
@@ -94,6 +123,58 @@ export function ControlsPanel({
         <img src="/Openfront-Editor-Logo.png" alt="OpenFront" className="toolbar-logo" />
         <h1 className="toolbar-title">Map Editor</h1>
       </button>
+
+      {/* Project name & switcher */}
+      <div className="toolbar-project" ref={projectSwitcherRef}>
+        <button
+          type="button"
+          className="toolbar-project-btn"
+          onClick={() => setShowProjectSwitcher(!showProjectSwitcher)}
+          title="Switch project"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+            <line x1="8" y1="2" x2="8" y2="18" />
+            <line x1="16" y1="6" x2="16" y2="22" />
+          </svg>
+          <span className="toolbar-project-name">{projectName || 'Untitled'}</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {showProjectSwitcher && (
+          <div className="toolbar-project-dropdown">
+            <div className="toolbar-project-dropdown-header">
+              <span>Switch project</span>
+            </div>
+            {projects.length === 0 ? (
+              <div className="toolbar-project-dropdown-empty">No other projects</div>
+            ) : (
+              projects.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`toolbar-project-dropdown-item${p.id === activeProjectId ? ' active' : ''}`}
+                  onClick={() => handleSwitchProject(p.id)}
+                >
+                  <span className="toolbar-project-dropdown-item-name">{p.name}</span>
+                  <span className="toolbar-project-dropdown-item-meta">{p.width}×{p.height}</span>
+                </button>
+              ))
+            )}
+            <div className="toolbar-project-dropdown-footer">
+              <button
+                type="button"
+                className="toolbar-project-dropdown-all"
+                onClick={() => { setShowProjectSwitcher(false); onGoHome() }}
+              >
+                All Projects
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="toolbar-divider" />
 
