@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './LandingPage.css'
 import { useProjectManagerStore, type ProjectSummary } from '../store/projectManagerStore'
-import { useEditorStore } from '../store/editorStore'
 import { importImageAsProject, importImageAsAnyMap, ImportError } from '../lib/importMap'
 
 const FEATURES = [
@@ -164,7 +163,6 @@ export function LandingPage(): React.ReactElement {
                 onCancelRename={() => setRenamingId(null)}
                 onDuplicate={() => duplicateProject(project.id)}
                 onDelete={() => handleDelete(project.id)}
-                onCancelDelete={() => setConfirmDeleteId(null)}
               />
             ))}
           </div>
@@ -239,7 +237,6 @@ function ProjectCard({
   onCancelRename,
   onDuplicate,
   onDelete,
-  onCancelDelete,
 }: {
   project: ProjectSummary
   isActive: boolean
@@ -253,7 +250,6 @@ function ProjectCard({
   onCancelRename: () => void
   onDuplicate: () => void
   onDelete: () => void
-  onCancelDelete: () => void
 }): React.ReactElement {
   const inputRef = useRef<HTMLInputElement>(null)
 
